@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>币安API参数配置</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-5" style="max-width: 600px;">
+    <h2 class="mb-4">币安API参数配置</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post">
+        <div class="mb-3">
+            <label class="form-label">API Key</label>
+            <input type="text" class="form-control" name="api_key" value="{{ env.get('BINANCE_API_KEY', '') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">API Secret</label>
+            <input type="password" class="form-control" name="api_secret" value="{{ env.get('BINANCE_API_SECRET', '') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">币种</label>
+            <select class="form-select" name="symbol">
+                {% for s in symbols %}
+                <option value="{{ s }}" {% if env.get('TRADING_PAIR', 'BTCUSDT') == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">杠杆倍数</label>
+            <input type="number" class="form-control" name="leverage" min="1" max="125" value="{{ env.get('LEVERAGE', '10') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">每次下单金额 (BTC)</label>
+            <input type="number" step="0.0001" class="form-control" name="quantity" value="{{ env.get('QUANTITY', '0.001') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">止损百分比 (%)</label>
+            <input type="number" step="0.01" class="form-control" name="stop_loss" value="{{ env.get('STOP_LOSS_PERCENTAGE', '0.3') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">止盈百分比 (%)</label>
+            <input type="number" step="0.01" class="form-control" name="take_profit" value="{{ env.get('TAKE_PROFIT_PERCENTAGE', '0.6') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">每日最大交易次数</label>
+            <input type="number" class="form-control" name="max_daily_trades" value="{{ env.get('MAX_DAILY_TRADES', '100') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">每日最大亏损百分比 (%)</label>
+            <input type="number" step="0.1" class="form-control" name="max_daily_loss" value="{{ env.get('MAX_DAILY_LOSS_PERCENTAGE', '3') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">网格数量</label>
+            <input type="number" class="form-control" name="grid_size" value="{{ env.get('GRID_SIZE', '10') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">网格间距 (%)</label>
+            <input type="number" step="0.01" class="form-control" name="grid_spacing" value="{{ env.get('GRID_SPACING', '0.2') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">趋势EMA快线周期</label>
+            <input type="number" class="form-control" name="trend_ema_fast" value="{{ env.get('TREND_EMA_FAST', '12') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">趋势EMA慢线周期</label>
+            <input type="number" class="form-control" name="trend_ema_slow" value="{{ env.get('TREND_EMA_SLOW', '26') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">剥头皮止盈目标 (%)</label>
+            <input type="number" step="0.01" class="form-control" name="scalping_profit_target" value="{{ env.get('SCALPING_PROFIT_TARGET', '0.2') }}" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">剥头皮止损 (%)</label>
+            <input type="number" step="0.01" class="form-control" name="scalping_stop_loss" value="{{ env.get('SCALPING_STOP_LOSS', '0.1') }}" required>
+        </div>
+        <button type="submit" class="btn btn-primary">保存参数</button>
+    </form>
+</div>
+</body>
+</html> 

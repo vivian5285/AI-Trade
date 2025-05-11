@@ -377,6 +377,220 @@ class BinanceTradingBot:
         self.initial_balance = self.get_account_balance()
         logging.info("每日统计数据已重置")
 
+    async def check_trading_opportunity(self, best_bid: float, best_ask: float):
+        """检查交易机会"""
+        try:
+            # 计算市场深度
+            bid_depth = sum(float(bid[1]) for bid in self.order_book['bids'][:self.order_book_depth])
+            ask_depth = sum(float(ask[1]) for ask in self.order_book['asks'][:self.order_book_depth])
+            
+            # 计算价格压力
+            price_pressure = (bid_depth - ask_depth) / (bid_depth + ask_depth)
+            
+            # 计算订单流
+            order_flow = self.calculate_order_flow()
+            
+            # 计算波动率
+            volatility = self.calculate_volatility()
+            
+            # 计算动量
+            momentum = self.calculate_momentum()
+            
+            # 综合信号
+            signal = self.generate_signal(price_pressure, order_flow, volatility, momentum)
+            
+            # 检查交易信号
+            if abs(signal) > 0.5:  # 信号阈值
+                side = 'BUY' if signal > 0 else 'SELL'
+                await self.execute_trade(side, best_bid, best_ask)
+                
+        except Exception as e:
+            logging.error(f"检查交易机会错误: {e}")
+            
+    def calculate_order_flow(self) -> float:
+        """计算订单流"""
+        try:
+            if len(self.trades_buffer) < 2:
+                return 0.0
+                
+            # 计算最近交易的买卖压力
+            buy_volume = sum(trade['quantity'] for trade in self.trades_buffer if trade['side'] == 'BUY')
+            sell_volume = sum(trade['quantity'] for trade in self.trades_buffer if trade['side'] == 'SELL')
+            
+            # 计算订单流指标
+            order_flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
+            
+            return order_flow
+            
+        except Exception as e:
+            logging.error(f"计算订单流错误: {e}")
+            return 0.0
+            
+    def calculate_volatility(self) -> float:
+        """计算波动率"""
+        try:
+            if len(self.klines_buffer) < 20:
+                return 0.0
+                
+            # 计算价格变化
+            prices = [float(kline['close']) for kline in self.klines_buffer]
+            returns = np.diff(prices) / prices[:-1]
+            
+            # 计算波动率
+            volatility = np.std(returns) * np.sqrt(252)  # 年化波动率
+            
+            return volatility
+            
+        except Exception as e:
+            logging.error(f"计算波动率错误: {e}")
+            return 0.0
+            
+    def calculate_momentum(self) -> float:
+        """计算动量"""
+        try:
+            if len(self.klines_buffer) < 10:
+                return 0.0
+                
+            # 计算价格动量
+            prices = [float(kline['close']) for kline in self.klines_buffer]
+            momentum = (prices[-1] - prices[0]) / prices[0]
+            
+            return momentum
+            
+        except Exception as e:
+            logging.error(f"计算动量错误: {e}")
+            return 0.0
+            
+    def generate_signal(self, price_pressure: float, order_flow: float, 
+                       volatility: float, momentum: float) -> float:
+        """生成交易信号"""
+        try:
+            # 信号权重
+            weights = {
+                'price_pressure': 0.3,
+                'order_flow': 0.3,
+                'volatility': 0.2,
+                'momentum': 0.2
+            }
+            
+            # 计算综合信号
+            signal = (
+                price_pressure * weights['price_pressure'] +
+                order_flow * weights['order_flow'] +
+                (1 - volatility) * weights['volatility'] +  # 低波动率更有利
+                momentum * weights['momentum']
+            )
+            
+            # 应用信号平滑
+            signal = np.tanh(signal)  # 使用tanh函数将信号限制在[-1, 1]范围内
+            
+            return signal
+            
+        except Exception as e:
+            logging.error(f"生成信号错误: {e}")
+            return 0.0
+            
+    async def execute_trade(self, side: str, bid: float, ask: float):
+        """执行交易"""
+        try:
+            # 检查风险限制
+            if not self.check_risk_limits():
+                return
+                
+            # 计算交易价格和数量
+            price = bid if side == 'BUY' else ask
+            quantity = self.calculate_position_size(price)
+            
+            # 构建订单
+            order = {
+                'symbol': self.trading_pair,
+                'side': side,
+                'type': 'LIMIT',
+                'timeInForce': 'IOC',
+                'quantity': quantity,
+                'price': price
+            }
+            
+            # 发送订单
+            response = await self.send_order(order)
+            
+            if response and response['status'] == 'FILLED':
+                # 更新持仓
+                self.update_position(side, price, quantity)
+                
+                # 记录交易
+                self.record_trade(side, price, quantity)
+                
+                # 设置动态止盈止损
+                self.set_dynamic_take_profit_stop_loss(side, price)
+                
+        except Exception as e:
+            logging.error(f"执行交易错误: {e}")
+            
+    def calculate_position_size(self, price: float) -> float:
+        """计算仓位大小"""
+        try:
+            # 获取账户余额
+            balance = self.get_account_balance()
+            
+            # 计算风险金额
+            risk_amount = balance * 0.01  # 风险1%的资金
+            
+            # 计算波动率
+            volatility = self.calculate_volatility()
+            
+            # 根据波动率调整仓位
+            position_size = risk_amount / (price * volatility)
+            
+            # 确保不超过最大仓位
+            position_size = min(position_size, self.quantity)
+            
+            return position_size
+            
+        except Exception as e:
+            logging.error(f"计算仓位大小错误: {e}")
+            return self.quantity
+            
+    def set_dynamic_take_profit_stop_loss(self, side: str, entry_price: float):
+        """设置动态止盈止损"""
+        try:
+            # 计算波动率
+            volatility = self.calculate_volatility()
+            
+            # 根据波动率调整止盈止损比例
+            take_profit_ratio = max(self.min_profit_threshold, volatility * 2)
+            stop_loss_ratio = max(self.min_profit_threshold, volatility)
+            
+            # 计算止盈止损价格
+            if side == 'BUY':
+                take_profit = entry_price * (1 + take_profit_ratio)
+                stop_loss = entry_price * (1 - stop_loss_ratio)
+            else:
+                take_profit = entry_price * (1 - take_profit_ratio)
+                stop_loss = entry_price * (1 + stop_loss_ratio)
+                
+            # 发送止盈止损订单
+            self.executor.submit(
+                self.client.futures_create_order,
+                symbol=self.trading_pair,
+                side='SELL' if side == 'BUY' else 'BUY',
+                type='TAKE_PROFIT_MARKET',
+                stopPrice=take_profit,
+                closePosition=True
+            )
+            
+            self.executor.submit(
+                self.client.futures_create_order,
+                symbol=self.trading_pair,
+                side='SELL' if side == 'BUY' else 'BUY',
+                type='STOP_MARKET',
+                stopPrice=stop_loss,
+                closePosition=True
+            )
+            
+        except Exception as e:
+            logging.error(f"设置动态止盈止损错误: {e}")
+
 if __name__ == "__main__":
     bot = BinanceTradingBot()
     bot.run() 

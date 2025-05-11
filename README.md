@@ -1,27 +1,21 @@
-# 币安合约量化交易机器人
+# Crypto Trading Bot Dashboard
 
-这是一个基于Python的币安合约量化交易机器人，支持自动做多和做空操作。
+一个简单的加密货币交易机器人仪表盘，支持币安和LBank交易所。
 
 ## 功能特点
 
-- 支持币安合约交易
-- 自动做多和做空
-- 使用多个技术指标（RSI、MACD、布林带）生成交易信号
-- 自动设置止损和止盈
-- 支持杠杆交易
-- 高频交易（1分钟K线）
+- 实时显示账户余额
+- 交易历史图表
+- API密钥配置
+- 交易参数设置
+- 支持币安和LBank交易所
 
-## 安装要求
-
-1. Python 3.7+
-2. 币安账户和API密钥
-
-## 安装步骤
+## 安装
 
 1. 克隆仓库：
 ```bash
-git clone [repository-url]
-cd [repository-name]
+git clone https://github.com/yourusername/crypto-trading-bot.git
+cd crypto-trading-bot
 ```
 
 2. 安装依赖：
@@ -29,52 +23,33 @@ cd [repository-name]
 pip install -r requirements.txt
 ```
 
-3. 配置环境变量：
-- 复制 `.env.example` 文件为 `.env`
-- 在 `.env` 文件中填入你的币安API密钥和其他配置
-
-## 配置说明
-
-在 `.env` 文件中配置以下参数：
-
-- `BINANCE_API_KEY`: 币安API密钥
-- `BINANCE_API_SECRET`: 币安API密钥密码
-- `TRADING_PAIR`: 交易对（例如：BTCUSDT）
-- `LEVERAGE`: 杠杆倍数
-- `QUANTITY`: 交易数量
-- `STOP_LOSS_PERCENTAGE`: 止损百分比
-- `TAKE_PROFIT_PERCENTAGE`: 止盈百分比
-
-## 使用方法
-
-运行交易机器人：
+3. 运行应用：
 ```bash
-python trading_bot.py
+python app.py
 ```
 
-## 交易策略
+4. 访问 http://localhost:5000 开始使用
 
-该机器人使用以下技术指标组合来生成交易信号：
+## 配置
 
-1. RSI（相对强弱指标）
-   - RSI < 30: 买入信号
-   - RSI > 70: 卖出信号
+1. 访问 http://localhost:5000/settings
+2. 输入你的币安和LBank API密钥
+3. 设置交易参数（交易对、杠杆、数量等）
 
-2. MACD（移动平均线趋势指标）
-   - MACD线上穿信号线: 买入信号
-   - MACD线下穿信号线: 卖出信号
+## 注意事项
 
-3. 布林带
-   - 价格触及下轨: 买入信号
-   - 价格触及上轨: 卖出信号
-
-## 风险提示
-
-- 加密货币交易具有高风险，请谨慎使用
+- 请确保API密钥具有适当的权限
 - 建议先在测试网络进行测试
-- 请确保了解合约交易的风险
-- 建议使用小资金进行测试
+- 请妥善保管你的API密钥
 
-## 免责声明
+## 技术栈
 
-本项目仅供学习和研究使用，不构成投资建议。使用本程序进行交易造成的任何损失由使用者自行承担。 
+- Flask
+- Python-Binance
+- Plotly
+- Bootstrap
+- jQuery
+
+## 许可证
+
+MIT 

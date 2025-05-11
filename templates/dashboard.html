@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Trading Dashboard</h2>
+    
+    <!-- 账户余额 -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Binance Balance</h4>
+                </div>
+                <div class="card-body">
+                    {% if binance_balance %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Asset</th>
+                                        <th>Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for asset, balance in binance_balance.items() %}
+                                    <tr>
+                                        <td>{{ asset }}</td>
+                                        <td>{{ "%.8f"|format(balance) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No Binance API configured</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h4>LBank Balance</h4>
+                </div>
+                <div class="card-body">
+                    {% if lbank_balance %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Asset</th>
+                                        <th>Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for asset, balance in lbank_balance.items() %}
+                                    <tr>
+                                        <td>{{ asset }}</td>
+                                        <td>{{ "%.8f"|format(balance) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No LBank API configured</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 交易图表 -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Binance Trading History</h4>
+                </div>
+                <div class="card-body">
+                    {% if binance_chart %}
+                        <div id="binance-chart"></div>
+                        <script>
+                            var binanceData = {{ binance_chart|safe }};
+                            Plotly.newPlot('binance-chart', binanceData.data, binanceData.layout);
+                        </script>
+                    {% else %}
+                        <p class="text-muted">No trading data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h4>LBank Trading History</h4>
+                </div>
+                <div class="card-body">
+                    {% if lbank_chart %}
+                        <div id="lbank-chart"></div>
+                        <script>
+                            var lbankData = {{ lbank_chart|safe }};
+                            Plotly.newPlot('lbank-chart', lbankData.data, lbankData.layout);
+                        </script>
+                    {% else %}
+                        <p class="text-muted">No trading data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

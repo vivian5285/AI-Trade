@@ -1,0 +1,7 @@
+requests==2.31.0
+websocket-client==1.6.4
+pandas==2.1.0
+numpy==1.24.3
+python-dotenv==1.0.0
+ta-lib==0.4.28
+ccxt==4.1.13 

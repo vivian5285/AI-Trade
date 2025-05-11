@@ -31,7 +31,9 @@ ENV/
 *.swp
 *.swo
 
-# Logs
+# Project specific
+config.json
+.env
 *.log
 
 # Environment variables
