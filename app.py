@@ -37,6 +37,78 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def api_response(data=None, success=True, error=None, message=None, status_code=200):
+    """统一的API响应格式"""
+    response = {
+        'success': success,
+        'data': data,
+        'error': error,
+        'message': message
+    }
+    return jsonify(response), status_code
+
+def load_config():
+    """加载配置文件"""
+    try:
+        config = {
+            'trading_settings': {
+                'exchange': os.getenv('CURRENT_EXCHANGE', 'binance'),
+                'trading_pair': os.getenv('TRADING_PAIR', 'BTCUSDT'),
+                'leverage': os.getenv('LEVERAGE', '10'),
+                'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
+                'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6'),
+                'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '100')
+            },
+            'strategy_settings': {
+                'rsi_period': os.getenv('RSI_PERIOD', '14'),
+                'rsi_overbought': os.getenv('RSI_OVERBOUGHT', '70'),
+                'rsi_oversold': os.getenv('RSI_OVERSOLD', '30'),
+                'bb_period': os.getenv('BB_PERIOD', '20'),
+                'bb_std': os.getenv('BB_STD', '2.0'),
+                'supertrend_atr_period': os.getenv('SUPERTREND_ATR_PERIOD', '10'),
+                'supertrend_atr_multiplier': os.getenv('SUPERTREND_ATR_MULTIPLIER', '3.0'),
+                'grid_count': os.getenv('GRID_COUNT', '10'),
+                'grid_spacing': os.getenv('GRID_SPACING', '0.5')
+            }
+        }
+        return config
+    except Exception as e:
+        logger.error(f"Error loading config: {str(e)}")
+        return None
+
+def get_high_frequency_trading_status():
+    """获取高频交易状态"""
+    try:
+        # 获取最近的交易记录
+        trades = TradeHistory.query.filter_by(strategy='high_frequency').order_by(TradeHistory.timestamp.desc()).limit(10).all()
+        
+        # 计算统计数据
+        total_trades = len(trades)
+        winning_trades = sum(1 for trade in trades if trade.pnl > 0)
+        total_profit = sum(trade.pnl for trade in trades)
+        
+        return {
+            'is_running': True,  # 这里需要根据实际情况判断
+            'total_trades': total_trades,
+            'winning_trades': winning_trades,
+            'win_rate': (winning_trades / total_trades * 100) if total_trades > 0 else 0,
+            'total_profit': total_profit,
+            'recent_trades': [
+                {
+                    'id': trade.id,
+                    'timestamp': trade.timestamp.isoformat(),
+                    'side': trade.side,
+                    'price': trade.price,
+                    'quantity': trade.quantity,
+                    'pnl': trade.pnl
+                }
+                for trade in trades
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error getting high frequency trading status: {str(e)}")
+        return None
+
 # 错误处理装饰器
 def handle_errors(f):
     @wraps(f)
