@@ -1,1 +1,308 @@
- 
+{% extends "base.html" %}
+
+{% block title %}交易机器人 - AI Trading System{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- 交易机器人控制面板 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">交易机器人控制</h5>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center">
+                        <div class="status-indicator me-2" id="bot-status-indicator"></div>
+                        <span id="bot-status-text">状态: 检查中...</span>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <button class="btn btn-success me-2" id="start-bot">启动</button>
+                    <button class="btn btn-danger me-2" id="stop-bot">停止</button>
+                    <button class="btn btn-warning" id="restart-bot">重启</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 策略参数配置 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">策略参数</h5>
+        </div>
+        <div class="card-body">
+            <form id="strategy-settings">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>RSI策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">RSI周期</label>
+                            <input type="number" class="form-control" name="rsi_period" value="{{ settings.rsi_period }}" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">超买阈值</label>
+                            <input type="number" class="form-control" name="rsi_overbought" value="{{ settings.rsi_overbought }}" min="50" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">超卖阈值</label>
+                            <input type="number" class="form-control" name="rsi_oversold" value="{{ settings.rsi_oversold }}" min="0" max="50">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>布林带策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">周期</label>
+                            <input type="number" class="form-control" name="bb_period" value="{{ settings.bb_period }}" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">标准差倍数</label>
+                            <input type="number" class="form-control" name="bb_std" value="{{ settings.bb_std }}" min="0.1" max="5" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6>SuperTrend策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">ATR周期</label>
+                            <input type="number" class="form-control" name="supertrend_atr_period" value="{{ settings.supertrend_atr_period }}" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">ATR倍数</label>
+                            <input type="number" class="form-control" name="supertrend_atr_multiplier" value="{{ settings.supertrend_atr_multiplier }}" min="0.1" max="5" step="0.1">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>网格策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">网格数量</label>
+                            <input type="number" class="form-control" name="grid_count" value="{{ settings.grid_count }}" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">网格间距(%)</label>
+                            <input type="number" class="form-control" name="grid_spacing" value="{{ settings.grid_spacing }}" min="0.1" max="10" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end mt-3">
+                    <button type="submit" class="btn btn-primary">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 交易历史 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">最近交易</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>交易所</th>
+                            <th>交易对</th>
+                            <th>方向</th>
+                            <th>价格</th>
+                            <th>数量</th>
+                            <th>时间</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesTable">
+                        <!-- 交易数据将通过JavaScript动态填充 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 机器人日志 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">运行日志</h5>
+        </div>
+        <div class="card-body">
+            <div id="botLogs" class="bg-dark text-light p-3" style="height: 300px; overflow-y: auto;">
+                <!-- 日志将通过JavaScript动态填充 -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 更新交易机器人状态
+function updateBotStatus() {
+    fetch('/api/trading-bot/status')
+        .then(response => response.json())
+        .then(data => {
+            const indicator = document.getElementById('bot-status-indicator');
+            const statusText = document.getElementById('bot-status-text');
+            const startBtn = document.getElementById('start-bot');
+            const stopBtn = document.getElementById('stop-bot');
+            
+            if (data.is_running) {
+                indicator.style.backgroundColor = '#28a745';
+                statusText.textContent = '状态: 运行中';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                indicator.style.backgroundColor = '#dc3545';
+                statusText.textContent = '状态: 已停止';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        });
+}
+
+// 保存策略设置
+document.getElementById('strategy-settings').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const settings = {};
+    for (let [key, value] of formData.entries()) {
+        settings[key] = value;
+    }
+    
+    fetch('/api/save-strategy-settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('设置已保存');
+        } else {
+            alert('保存设置失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving settings:', error);
+        alert('保存设置失败');
+    });
+});
+
+// 更新交易历史
+function updateTrades() {
+    fetch('/api/trades')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const tradesTable = document.getElementById('tradesTable');
+                tradesTable.innerHTML = data.trades.map(trade => `
+                    <tr>
+                        <td>${trade.exchange}</td>
+                        <td>${trade.symbol}</td>
+                        <td>${trade.side}</td>
+                        <td>${trade.price}</td>
+                        <td>${trade.quantity}</td>
+                        <td>${new Date(trade.timestamp).toLocaleString()}</td>
+                        <td>
+                            <span class="badge ${trade.status === 'CLOSED' ? 'bg-success' : trade.status === 'OPEN' ? 'bg-warning' : 'bg-danger'}">
+                                ${trade.status}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        })
+        .catch(error => console.error('Error updating trades:', error));
+}
+
+// 更新机器人日志
+function updateBotLogs() {
+    fetch('/api/trading-bot/logs')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const logsContainer = document.getElementById('botLogs');
+                logsContainer.innerHTML = data.logs.map(log => `
+                    <div class="log-entry">
+                        <small class="text-muted">${new Date(log.timestamp).toLocaleString()}</small>
+                        <div>${log.message}</div>
+                    </div>
+                `).join('');
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            }
+        })
+        .catch(error => console.error('Error updating bot logs:', error));
+}
+
+// 启动交易机器人
+document.getElementById('start-bot').addEventListener('click', function() {
+    fetch('/api/trading-bot/start', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateBotStatus();
+            } else {
+                alert('启动失败: ' + data.error);
+            }
+        });
+});
+
+// 停止交易机器人
+document.getElementById('stop-bot').addEventListener('click', function() {
+    fetch('/api/trading-bot/stop', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateBotStatus();
+            } else {
+                alert('停止失败: ' + data.error);
+            }
+        });
+});
+
+// 重启交易机器人
+document.getElementById('restart-bot').addEventListener('click', function() {
+    fetch('/api/trading-bot/restart', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateBotStatus();
+            } else {
+                alert('重启失败: ' + data.error);
+            }
+        });
+});
+
+// 在页面加载时初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 立即更新数据
+    updateBotStatus();
+    updateTrades();
+    updateBotLogs();
+    
+    // 设置定时更新
+    setInterval(updateBotStatus, 5000);  // 每5秒更新机器人状态
+    setInterval(updateTrades, 10000);  // 每10秒更新交易历史
+    setInterval(updateBotLogs, 5000);  // 每5秒更新机器人日志
+});
+</script>
+
+<style>
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    display: inline-block;
+}
+.log-entry {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #444;
+}
+.log-entry:last-child {
+    border-bottom: none;
+}
+</style>
+{% endblock %} 

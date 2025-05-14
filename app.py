@@ -111,6 +111,9 @@ except Exception as e:
 # 添加全局变量来跟踪交易机器人进程
 trading_bot_process = None
 
+# 交易机器人状态管理
+trading_bot_running = False
+
 # 路由：首页/仪表盘
 @app.route('/')
 def dashboard():
@@ -401,40 +404,77 @@ def get_market_data():
     try:
         # 获取当前交易所
         current_exchange = os.getenv('CURRENT_EXCHANGE', 'Binance')
+        logger.info(f"Getting market data for exchange: {current_exchange}")
         
         # 根据交易所获取市场数据
         if current_exchange == 'Binance':
-            client = get_binance_client()
-            # 获取 BTC/USDT 数据
-            btc_ticker = client.get_ticker(symbol='BTCUSDT')
-            btc_price = float(btc_ticker['lastPrice'])
-            btc_change = float(btc_ticker['priceChangePercent'])
+            # 获取Binance API密钥
+            api_key = APIKey.query.filter_by(exchange='Binance', is_active=True).first()
+            if not api_key:
+                logger.error("No active Binance API key found")
+                raise Exception("No active Binance API key found")
             
-            # 获取 ETH/USDT 数据
-            eth_ticker = client.get_ticker(symbol='ETHUSDT')
-            eth_price = float(eth_ticker['lastPrice'])
-            eth_change = float(eth_ticker['priceChangePercent'])
+            logger.info("Found active Binance API key")
+            client = Client(api_key.api_key, api_key.api_secret)
+            
+            try:
+                # 获取 BTC/USDT 数据
+                logger.info("Fetching BTC/USDT data from Binance")
+                btc_ticker = client.get_ticker(symbol='BTCUSDT')
+                btc_price = float(btc_ticker['lastPrice'])
+                btc_change = float(btc_ticker['priceChangePercent'])
+                logger.info(f"BTC/USDT data received - Price: {btc_price}, Change: {btc_change}%")
+                
+                # 获取 ETH/USDT 数据
+                logger.info("Fetching ETH/USDT data from Binance")
+                eth_ticker = client.get_ticker(symbol='ETHUSDT')
+                eth_price = float(eth_ticker['lastPrice'])
+                eth_change = float(eth_ticker['priceChangePercent'])
+                logger.info(f"ETH/USDT data received - Price: {eth_price}, Change: {eth_change}%")
+                
+            except Exception as e:
+                logger.error(f"Error fetching data from Binance: {str(e)}")
+                raise
             
         elif current_exchange == 'LBank':
-            # 获取 BTC/USDT 数据
-            btc_response = requests.get('https://api.lbank.info/v2/ticker.do?symbol=btc_usdt')
-            btc_data = btc_response.json()
-            if btc_data['result']:
-                btc_price = float(btc_data['data'][0]['ticker']['latest'])
-                btc_change = float(btc_data['data'][0]['ticker']['change'])
-            else:
-                raise Exception("Failed to get BTC/USDT data from LBank")
+            # 获取LBank API密钥
+            api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
+            if not api_key:
+                logger.error("No active LBank API key found")
+                raise Exception("No active LBank API key found")
             
-            # 获取 ETH/USDT 数据
-            eth_response = requests.get('https://api.lbank.info/v2/ticker.do?symbol=eth_usdt')
-            eth_data = eth_response.json()
-            if eth_data['result']:
-                eth_price = float(eth_data['data'][0]['ticker']['latest'])
-                eth_change = float(eth_data['data'][0]['ticker']['change'])
-            else:
-                raise Exception("Failed to get ETH/USDT data from LBank")
+            logger.info("Found active LBank API key")
+            
+            try:
+                # 获取 BTC/USDT 数据
+                logger.info("Fetching BTC/USDT data from LBank")
+                btc_response = requests.get('https://api.lbank.info/v2/ticker.do?symbol=btc_usdt')
+                btc_data = btc_response.json()
+                if btc_data['result']:
+                    btc_price = float(btc_data['data'][0]['ticker']['latest'])
+                    btc_change = float(btc_data['data'][0]['ticker']['change'])
+                    logger.info(f"BTC/USDT data received - Price: {btc_price}, Change: {btc_change}%")
+                else:
+                    logger.error("Failed to get BTC/USDT data from LBank")
+                    raise Exception("Failed to get BTC/USDT data from LBank")
+                
+                # 获取 ETH/USDT 数据
+                logger.info("Fetching ETH/USDT data from LBank")
+                eth_response = requests.get('https://api.lbank.info/v2/ticker.do?symbol=eth_usdt')
+                eth_data = eth_response.json()
+                if eth_data['result']:
+                    eth_price = float(eth_data['data'][0]['ticker']['latest'])
+                    eth_change = float(eth_data['data'][0]['ticker']['change'])
+                    logger.info(f"ETH/USDT data received - Price: {eth_price}, Change: {eth_change}%")
+                else:
+                    logger.error("Failed to get ETH/USDT data from LBank")
+                    raise Exception("Failed to get ETH/USDT data from LBank")
+                    
+            except Exception as e:
+                logger.error(f"Error fetching data from LBank: {str(e)}")
+                raise
         
-        return jsonify({
+        response_data = {
             'success': True,
             'btc': {
                 'price': f'${btc_price:,.2f}',
@@ -444,7 +484,10 @@ def get_market_data():
                 'price': f'${eth_price:,.2f}',
                 'change': f'{eth_change:+.2f}%'
             }
-        })
+        }
+        logger.info(f"Market data response: {response_data}")
+        return jsonify(response_data)
+        
     except Exception as e:
         logger.error(f"Error getting market data: {str(e)}")
         return jsonify({
@@ -490,12 +533,21 @@ def get_account_data():
                     exchange_positions = []
                     for asset in account['balances']:
                         if float(asset['free']) > 0 or float(asset['locked']) > 0:
-                            exchange_positions.append({
-                                'exchange': 'Binance',
-                                'asset': asset['asset'],
-                                'free': float(asset['free']),
-                                'locked': float(asset['locked'])
-                            })
+                            try:
+                                ticker = client.get_ticker(symbol=f"{asset['asset']}USDT")
+                                price = float(ticker['lastPrice'])
+                                value = (float(asset['free']) + float(asset['locked'])) * price
+                                
+                                exchange_positions.append({
+                                    'exchange': 'Binance',
+                                    'asset': asset['asset'],
+                                    'free': float(asset['free']),
+                                    'locked': float(asset['locked']),
+                                    'price': price,
+                                    'value': value
+                                })
+                            except:
+                                continue
                     
                     # 计算该交易所的今日盈亏
                     today = datetime.now().date()
@@ -504,7 +556,8 @@ def get_account_data():
                         TradeHistory.timestamp >= today
                     ).all()
                     
-                    exchange_daily_pnl = sum(trade.price for trade in daily_trades if trade.price is not None)
+                    exchange_daily_pnl = sum(trade.price * trade.quantity for trade in daily_trades if trade.side == 'BUY') - \
+                                       sum(trade.price * trade.quantity for trade in daily_trades if trade.side == 'SELL')
                     
                     # 累加到总数据
                     total_balance += exchange_balance
@@ -543,12 +596,21 @@ def get_account_data():
                         exchange_positions = []
                         for asset in account['data']:
                             if float(asset['free']) > 0 or float(asset['freeze']) > 0:
-                                exchange_positions.append({
-                                    'exchange': 'LBank',
-                                    'asset': asset['asset'].upper(),
-                                    'free': float(asset['free']),
-                                    'locked': float(asset['freeze'])
-                                })
+                                try:
+                                    ticker = requests.get(f'https://api.lbank.info/v2/ticker.do?symbol={asset["asset"]}_usdt').json()
+                                    price = float(ticker['data'][0]['ticker']['latest'])
+                                    value = (float(asset['free']) + float(asset['freeze'])) * price
+                                    
+                                    exchange_positions.append({
+                                        'exchange': 'LBank',
+                                        'asset': asset['asset'].upper(),
+                                        'free': float(asset['free']),
+                                        'locked': float(asset['freeze']),
+                                        'price': price,
+                                        'value': value
+                                    })
+                                except:
+                                    continue
                         
                         # 计算该交易所的今日盈亏
                         today = datetime.now().date()
@@ -557,7 +619,8 @@ def get_account_data():
                             TradeHistory.timestamp >= today
                         ).all()
                         
-                        exchange_daily_pnl = sum(trade.price for trade in daily_trades if trade.price is not None)
+                        exchange_daily_pnl = sum(trade.price * trade.quantity for trade in daily_trades if trade.side == 'BUY') - \
+                                           sum(trade.price * trade.quantity for trade in daily_trades if trade.side == 'SELL')
                         
                         # 累加到总数据
                         total_balance += exchange_balance
@@ -573,8 +636,8 @@ def get_account_data():
             'balance': f'${total_balance:,.2f}',
             'daily_pnl': f'${total_daily_pnl:,.2f}',
             'open_positions': len(total_positions),
-            'total_position': f'${total_balance:,.2f}',
-            'positions': total_positions  # 添加详细的持仓信息
+            'total_position': f'${sum(pos["value"] for pos in total_positions):,.2f}',
+            'positions': total_positions
         })
     except Exception as e:
         logger.error(f"Error getting account data: {str(e)}")
@@ -735,87 +798,143 @@ def get_settings():
         logger.error(f"Error getting settings: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/trading-bot/status')
-def get_trading_bot_status():
+@app.route('/trading-bot')
+def trading_bot():
     try:
-        global trading_bot_process
-        is_running = trading_bot_process is not None and trading_bot_process.poll() is None
-        return jsonify({
-            'success': True,
-            'is_running': is_running
-        })
+        # 获取当前策略设置
+        settings = {
+            'rsi_period': int(os.getenv('RSI_PERIOD', 14)),
+            'rsi_overbought': int(os.getenv('RSI_OVERBOUGHT', 70)),
+            'rsi_oversold': int(os.getenv('RSI_OVERSOLD', 30)),
+            'bb_period': int(os.getenv('BB_PERIOD', 20)),
+            'bb_std': float(os.getenv('BB_STD', 2.0)),
+            'supertrend_atr_period': int(os.getenv('SUPERTREND_ATR_PERIOD', 10)),
+            'supertrend_atr_multiplier': float(os.getenv('SUPERTREND_ATR_MULTIPLIER', 3.0)),
+            'grid_count': int(os.getenv('GRID_COUNT', 10)),
+            'grid_spacing': float(os.getenv('GRID_SPACING', 1.0))
+        }
+        
+        # 获取最近的交易记录
+        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        
+        return render_template('trading_bot.html', settings=settings, trades=trades)
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        logger.error(f"Error loading trading bot page: {str(e)}")
+        return render_template('error.html', error="加载交易机器人页面时出错")
+
+@app.route('/api/trading-bot/status')
+def get_bot_status():
+    return jsonify({
+        'success': True,
+        'is_running': trading_bot_running
+    })
 
 @app.route('/api/trading-bot/start', methods=['POST'])
 def start_trading_bot():
+    global trading_bot_running
     try:
-        global trading_bot_process
+        if trading_bot_running:
+            return jsonify({
+                'success': False,
+                'error': '交易机器人已经在运行中'
+            })
         
-        # 如果已经有进程在运行，先停止它
-        if trading_bot_process is not None and trading_bot_process.poll() is None:
-            trading_bot_process.terminate()
-            trading_bot_process.wait()
+        # 启动交易机器人的逻辑
+        trading_bot_running = True
+        logger.info("交易机器人已启动")
         
-        # 启动新的进程
-        if os.name == 'nt':  # Windows
-            trading_bot_process = subprocess.Popen(['python', 'run_trading_bot.py'],
-                                                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
-        else:  # Linux/Unix
-            trading_bot_process = subprocess.Popen(['python3', 'run_trading_bot.py'],
-                                                 preexec_fn=os.setpgrp)
-            
         return jsonify({
             'success': True,
             'message': '交易机器人已启动'
         })
     except Exception as e:
+        logger.error(f"Error starting trading bot: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500
+        })
 
 @app.route('/api/trading-bot/stop', methods=['POST'])
 def stop_trading_bot():
+    global trading_bot_running
     try:
-        global trading_bot_process
+        if not trading_bot_running:
+            return jsonify({
+                'success': False,
+                'error': '交易机器人已经停止'
+            })
         
-        if trading_bot_process is not None:
-            if os.name == 'nt':  # Windows
-                trading_bot_process.terminate()
-            else:  # Linux/Unix
-                os.killpg(os.getpgid(trading_bot_process.pid), signal.SIGTERM)
-            trading_bot_process.wait()
-            trading_bot_process = None
-            
+        # 停止交易机器人的逻辑
+        trading_bot_running = False
+        logger.info("交易机器人已停止")
+        
         return jsonify({
             'success': True,
             'message': '交易机器人已停止'
         })
     except Exception as e:
+        logger.error(f"Error stopping trading bot: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500
+        })
 
 @app.route('/api/trading-bot/restart', methods=['POST'])
 def restart_trading_bot():
     try:
         # 先停止
-        stop_response = stop_trading_bot()
-        if not stop_response.json['success']:
-            return stop_response
-            
+        stop_trading_bot()
         # 再启动
         return start_trading_bot()
     except Exception as e:
+        logger.error(f"Error restarting trading bot: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500
+        })
+
+@app.route('/api/trading-bot/logs')
+def get_bot_logs():
+    try:
+        # 读取最近的日志
+        log_file = 'app.log'
+        if not os.path.exists(log_file):
+            return jsonify({
+                'success': False,
+                'error': '日志文件不存在'
+            })
+        
+        # 读取最后100行日志
+        with open(log_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            last_lines = lines[-100:] if len(lines) > 100 else lines
+        
+        # 解析日志
+        logs = []
+        for line in last_lines:
+            try:
+                # 假设日志格式为: [时间戳] 级别: 消息
+                parts = line.split('] ', 1)
+                if len(parts) == 2:
+                    timestamp = parts[0].strip('[')
+                    message = parts[1].strip()
+                    logs.append({
+                        'timestamp': timestamp,
+                        'message': message
+                    })
+            except:
+                continue
+        
+        return jsonify({
+            'success': True,
+            'logs': logs
+        })
+    except Exception as e:
+        logger.error(f"Error getting bot logs: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
 
 # 资金管理和风险控制
 def calculate_position_size(balance, symbol, exchange='Binance'):
@@ -1403,31 +1522,6 @@ def not_found_error(error):
         'message': str(error)
     }), 404
 
-# 添加交易机器人页面路由
-@app.route('/trading-bot')
-def trading_bot():
-    try:
-        # 获取当前设置
-        current_settings = {
-            'rsi_period': os.getenv('RSI_PERIOD', '14'),
-            'rsi_overbought': os.getenv('RSI_OVERBOUGHT', '70'),
-            'rsi_oversold': os.getenv('RSI_OVERSOLD', '30'),
-            'bb_period': os.getenv('BB_PERIOD', '20'),
-            'bb_std': os.getenv('BB_STD', '2'),
-            'supertrend_atr_period': os.getenv('SUPERTREND_ATR_PERIOD', '10'),
-            'supertrend_atr_multiplier': os.getenv('SUPERTREND_ATR_MULTIPLIER', '2'),
-            'grid_count': os.getenv('GRID_COUNT', '10'),
-            'grid_spacing': os.getenv('GRID_SPACING', '1')
-        }
-        
-        # 获取最近的交易记录
-        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(50).all()
-        
-        return render_template('trading_bot.html', settings=current_settings, trades=trades)
-    except Exception as e:
-        logger.error(f"Error in trading_bot route: {str(e)}")
-        return render_template('error.html', error=str(e)), 500
-
 # 添加获取交易历史的API
 @app.route('/api/trades')
 def get_trades():
@@ -1452,40 +1546,46 @@ def get_trades():
             'error': str(e)
         }), 500
 
-# 添加获取机器人日志的API
-@app.route('/api/trading-bot/logs')
-def get_bot_logs():
+def check_api_keys():
     try:
-        # 从日志文件中读取最近的日志
-        logs = []
-        try:
-            with open('app.log', 'r') as f:
-                # 读取最后100行日志
-                lines = f.readlines()[-100:]
-                for line in lines:
-                    # 解析日志行
-                    try:
-                        timestamp_str = line.split(' - ')[0]
-                        message = ' - '.join(line.split(' - ')[1:]).strip()
-                        logs.append({
-                            'timestamp': datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S,%f').isoformat(),
-                            'message': message
-                        })
-                    except:
-                        continue
-        except FileNotFoundError:
-            pass
+        # 检查是否有活跃的API密钥
+        active_keys = APIKey.query.filter_by(is_active=True).all()
+        if not active_keys:
+            logger.warning("No active API keys found")
+            return False
             
-        return jsonify({
-            'success': True,
-            'logs': logs
-        })
+        # 检查每个API密钥是否有效
+        for key in active_keys:
+            try:
+                if key.exchange == 'Binance':
+                    client = Client(key.api_key, key.api_secret)
+                    client.get_account()
+                elif key.exchange == 'LBank':
+                    timestamp = str(int(time.time() * 1000))
+                    params = {
+                        'api_key': key.api_key,
+                        'timestamp': timestamp
+                    }
+                    sign = generate_lbank_sign(params, key.api_secret)
+                    params['sign'] = sign
+                    response = requests.get('https://api.lbank.info/v2/user/account', params=params)
+                    if not response.json()['result']:
+                        raise Exception("Invalid LBank API key")
+            except Exception as e:
+                logger.error(f"Invalid API key for {key.exchange}: {str(e)}")
+                key.is_active = False
+                db.session.commit()
+                continue
+                
+        return True
     except Exception as e:
-        logger.error(f"Error getting bot logs: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        logger.error(f"Error checking API keys: {str(e)}")
+        return False
+
+# 在应用启动时检查API密钥
+@app.before_first_request
+def before_first_request():
+    check_api_keys()
 
 if __name__ == '__main__':
     # 修改为监听本地地址，让 Nginx 处理外部请求

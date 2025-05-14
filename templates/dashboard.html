@@ -55,35 +55,12 @@
                             <p id="total-position">加载中...</p>
                         </div>
                     </div>
-                    <!-- 添加持仓详情 -->
-                    <div class="mt-3">
-                        <h6>持仓详情</h6>
-                        <div id="positions-details">
-                            <div class="table-responsive">
-                                <table class="table table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>交易所</th>
-                                            <th>资产</th>
-                                            <th>可用</th>
-                                            <th>冻结</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="positions-table">
-                                        <tr>
-                                            <td colspan="4" class="text-center">加载中...</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 在交易机器人控制面板之前添加K线图表 -->
+    <!-- K线图表 -->
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">K线图表</h5>
@@ -107,144 +84,7 @@
         </div>
     </div>
 
-    <!-- 在交易机器人控制面板之前添加策略参数配置 -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="mb-0">策略参数</h5>
-        </div>
-        <div class="card-body">
-            <form id="strategy-settings">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6>RSI策略</h6>
-                        <div class="mb-3">
-                            <label class="form-label">RSI周期</label>
-                            <input type="number" class="form-control" name="rsi_period" value="14" min="1" max="100">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">超买阈值</label>
-                            <input type="number" class="form-control" name="rsi_overbought" value="70" min="50" max="100">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">超卖阈值</label>
-                            <input type="number" class="form-control" name="rsi_oversold" value="30" min="0" max="50">
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>布林带策略</h6>
-                        <div class="mb-3">
-                            <label class="form-label">周期</label>
-                            <input type="number" class="form-control" name="bb_period" value="20" min="1" max="100">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">标准差倍数</label>
-                            <input type="number" class="form-control" name="bb_std" value="2" min="0.1" max="5" step="0.1">
-                        </div>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <h6>SuperTrend策略</h6>
-                        <div class="mb-3">
-                            <label class="form-label">ATR周期</label>
-                            <input type="number" class="form-control" name="supertrend_atr_period" value="10" min="1" max="100">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">ATR倍数</label>
-                            <input type="number" class="form-control" name="supertrend_atr_multiplier" value="2" min="0.1" max="5" step="0.1">
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>网格策略</h6>
-                        <div class="mb-3">
-                            <label class="form-label">网格数量</label>
-                            <input type="number" class="form-control" name="grid_count" value="10" min="1" max="100">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">网格间距(%)</label>
-                            <input type="number" class="form-control" name="grid_spacing" value="1" min="0.1" max="10" step="0.1">
-                        </div>
-                    </div>
-                </div>
-                <div class="text-end mt-3">
-                    <button type="submit" class="btn btn-primary">保存设置</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 交易机器人控制面板 -->
-    <div class="row mb-4" id="trading-bot">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">交易机器人控制</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-3">
-                            <div class="d-flex align-items-center">
-                                <div class="status-indicator me-2" id="bot-status-indicator"></div>
-                                <span id="bot-status-text">状态: 检查中...</span>
-                            </div>
-                        </div>
-                        <div class="col-md-9">
-                            <button class="btn btn-success me-2" id="start-bot">启动</button>
-                            <button class="btn btn-danger me-2" id="stop-bot">停止</button>
-                            <button class="btn btn-warning" id="restart-bot">重启</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 交易历史卡片 -->
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">最近交易</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>交易所</th>
-                                    <th>交易对</th>
-                                    <th>方向</th>
-                                    <th>价格</th>
-                                    <th>数量</th>
-                                    <th>时间</th>
-                                    <th>状态</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for trade in trades %}
-                                <tr>
-                                    <td>{{ trade.exchange }}</td>
-                                    <td>{{ trade.symbol }}</td>
-                                    <td>{{ trade.side }}</td>
-                                    <td>{{ trade.price }}</td>
-                                    <td>{{ trade.quantity }}</td>
-                                    <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                                    <td>
-                                        <span class="badge {% if trade.status == 'CLOSED' %}bg-success{% elif trade.status == 'OPEN' %}bg-warning{% else %}bg-danger{% endif %}">
-                                            {{ trade.status }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 添加持仓详情卡片 -->
+    <!-- 持仓详情卡片 -->
     <div class="card mb-4">
         <div class="card-header">
             <h5 class="card-title mb-0">持仓详情</h5>
@@ -355,36 +195,6 @@ function updateKlineChart() {
         .catch(error => console.error('Error updating kline chart:', error));
 }
 
-// 保存策略设置
-document.getElementById('strategy-settings').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    const settings = {};
-    for (let [key, value] of formData.entries()) {
-        settings[key] = value;
-    }
-    
-    fetch('/api/save-strategy-settings', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('设置已保存');
-        } else {
-            alert('保存设置失败: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error saving settings:', error);
-        alert('保存设置失败');
-    });
-});
-
 // 更新市场数据
 function updateMarketData() {
     fetch('/api/market-data')
@@ -423,21 +233,6 @@ function updateAccountData() {
                 document.getElementById('daily-pnl').textContent = data.daily_pnl;
                 document.getElementById('open-positions').textContent = data.open_positions;
                 document.getElementById('total-position').textContent = data.total_position;
-                
-                // 更新持仓详情表格
-                const positionsTable = document.getElementById('positions-table');
-                if (data.positions && data.positions.length > 0) {
-                    positionsTable.innerHTML = data.positions.map(position => `
-                        <tr>
-                            <td>${position.exchange}</td>
-                            <td>${position.asset}</td>
-                            <td>${position.free.toFixed(8)}</td>
-                            <td>${position.locked.toFixed(8)}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    positionsTable.innerHTML = '<tr><td colspan="4" class="text-center">暂无持仓</td></tr>';
-                }
             } else {
                 console.error('Error fetching account data:', data.error);
             }
@@ -446,69 +241,6 @@ function updateAccountData() {
             console.error('Error fetching account data:', error);
         });
 }
-
-// 更新交易机器人状态
-function updateBotStatus() {
-    fetch('/api/trading-bot/status')
-        .then(response => response.json())
-        .then(data => {
-            const indicator = document.getElementById('bot-status-indicator');
-            const statusText = document.getElementById('bot-status-text');
-            const startBtn = document.getElementById('start-bot');
-            const stopBtn = document.getElementById('stop-bot');
-            
-            if (data.is_running) {
-                indicator.style.backgroundColor = '#28a745';
-                statusText.textContent = '状态: 运行中';
-                startBtn.disabled = true;
-                stopBtn.disabled = false;
-            } else {
-                indicator.style.backgroundColor = '#dc3545';
-                statusText.textContent = '状态: 已停止';
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-            }
-        });
-}
-
-// 启动交易机器人
-document.getElementById('start-bot').addEventListener('click', function() {
-    fetch('/api/trading-bot/start', { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateBotStatus();
-            } else {
-                alert('启动失败: ' + data.error);
-            }
-        });
-});
-
-// 停止交易机器人
-document.getElementById('stop-bot').addEventListener('click', function() {
-    fetch('/api/trading-bot/stop', { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateBotStatus();
-            } else {
-                alert('停止失败: ' + data.error);
-            }
-        });
-});
-
-// 重启交易机器人
-document.getElementById('restart-bot').addEventListener('click', function() {
-    fetch('/api/trading-bot/restart', { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateBotStatus();
-            } else {
-                alert('重启失败: ' + data.error);
-            }
-        });
-});
 
 // 更新持仓数据
 function updatePositionsData() {
@@ -565,14 +297,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // 监听时间周期和交易对选择变化
     document.getElementById('timeframe').addEventListener('change', updateKlineChart);
     document.getElementById('symbol').addEventListener('change', updateKlineChart);
-    
-    // 检查是否需要滚动到交易机器人部分
-    if (window.location.hash === '#trading-bot') {
-        const tradingBotSection = document.getElementById('trading-bot');
-        if (tradingBotSection) {
-            tradingBotSection.scrollIntoView({ behavior: 'smooth' });
-        }
-    }
 });
 </script>
 {% endblock %}
