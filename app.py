@@ -1687,60 +1687,87 @@ def update_trading_bot(bot_id):
         
         # 验证数据
         if not validate_bot_data(data):
-            return jsonify({'success': False, 'error': '无效的机器人参数'})
+            return api_response(
+                success=False,
+                error="无效的机器人参数",
+                message="请检查机器人参数是否正确",
+                status_code=400
+            )
         
         # 检查机器人是否存在
-        db = get_db()
-        bot = db.execute('SELECT id FROM trading_bots WHERE id = ?', (bot_id,)).fetchone()
+        bot = TradingBotConfig.query.get(bot_id)
         if not bot:
-            return jsonify({'success': False, 'error': '机器人不存在'})
+            return api_response(
+                success=False,
+                error="机器人不存在",
+                message="找不到指定的机器人",
+                status_code=404
+            )
         
-        # 更新数据库
-        db.execute('''
-            UPDATE trading_bots
-            SET name = ?, exchange = ?, trading_pair = ?, strategies = ?,
-                funds = ?, leverage = ?, stop_loss = ?, take_profit = ?,
-                max_daily_trades = ?
-            WHERE id = ?
-        ''', (
-            data['name'],
-            data['exchange'],
-            data['trading_pair'],
-            json.dumps(data['strategies']),
-            data['funds'],
-            data['leverage'],
-            data['stop_loss'],
-            data['take_profit'],
-            data['max_daily_trades'],
-            bot_id
-        ))
-        db.commit()
+        # 更新机器人配置
+        bot.name = data['name']
+        bot.exchange = data['exchange']
+        bot.trading_pair = data['trading_pair']
+        bot.strategies = json.dumps(data['strategies'])
+        bot.funds = data['funds']
+        bot.leverage = data['leverage']
+        bot.stop_loss = data['stop_loss']
+        bot.take_profit = data['take_profit']
+        bot.max_daily_trades = data['max_daily_trades']
         
-        return jsonify({'success': True})
+        db.session.commit()
+        
+        return api_response(
+            message="机器人配置已更新"
+        )
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        logger.error(f"Error updating trading bot: {str(e)}")
+        db.session.rollback()
+        return api_response(
+            success=False,
+            error=str(e),
+            message="更新机器人配置失败",
+            status_code=500
+        )
 
 @app.route('/api/trading-bots/<int:bot_id>', methods=['DELETE'])
 def delete_trading_bot(bot_id):
     try:
-        db = get_db()
-        
         # 检查机器人是否存在
-        bot = db.execute('SELECT id, status FROM trading_bots WHERE id = ?', (bot_id,)).fetchone()
+        bot = TradingBotConfig.query.get(bot_id)
         if not bot:
-            return jsonify({'success': False, 'error': '机器人不存在'})
+            return api_response(
+                success=False,
+                error="机器人不存在",
+                message="找不到指定的机器人",
+                status_code=404
+            )
         
         # 检查机器人是否在运行
-        if bot['status'] == 'RUNNING':
-            return jsonify({'success': False, 'error': '请先停止机器人'})
+        if bot.status == 'RUNNING':
+            return api_response(
+                success=False,
+                error="请先停止机器人",
+                message="无法删除正在运行的机器人",
+                status_code=400
+            )
         
         # 删除机器人
-        db.execute('DELETE FROM trading_bots WHERE id = ?', (bot_id,))
-        db.commit()
+        db.session.delete(bot)
+        db.session.commit()
         
-        return jsonify({'success': True})
+        return api_response(
+            message="机器人已删除"
+        )
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        logger.error(f"Error deleting trading bot: {str(e)}")
+        db.session.rollback()
+        return api_response(
+            success=False,
+            error=str(e),
+            message="删除机器人失败",
+            status_code=500
+        )
 
 def validate_bot_data(data):
     """验证机器人参数是否有效"""
