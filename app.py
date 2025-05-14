@@ -474,58 +474,6 @@ def get_trades():
             status_code=500
         )
 
-@app.route('/api/trades/<int:trade_id>')
-@handle_errors
-@log_request
-def get_trade_detail(trade_id):
-    try:
-        # 获取单个交易记录，并关联机器人信息
-        trade = db.session.query(
-            TradeHistory,
-            TradingBotConfig.name.label('bot_name')
-        ).outerjoin(
-            TradingBotConfig,
-            TradeHistory.bot_id == TradingBotConfig.id
-        ).filter(TradeHistory.id == trade_id).first()
-        
-        if not trade:
-            return api_response(
-                success=False,
-                error="交易记录不存在",
-                message="未找到指定的交易记录",
-                status_code=404
-            )
-        
-        return api_response(
-            data={
-                'trade': {
-                    'id': trade.TradeHistory.id,
-                    'bot_id': trade.TradeHistory.bot_id,
-                    'bot_name': trade.bot_name,
-                    'exchange': trade.TradeHistory.exchange,
-                    'symbol': trade.TradeHistory.symbol,
-                    'side': trade.TradeHistory.side,
-                    'position_type': trade.TradeHistory.position_type,
-                    'price': trade.TradeHistory.price,
-                    'quantity': trade.TradeHistory.quantity,
-                    'timestamp': trade.TradeHistory.timestamp.isoformat(),
-                    'status': trade.TradeHistory.status,
-                    'strategy': trade.TradeHistory.strategy,
-                    'strategy_params': trade.TradeHistory.strategy_params,
-                    'pnl': trade.TradeHistory.pnl,
-                    'pnl_percentage': trade.TradeHistory.pnl_percentage
-                }
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error getting trade detail: {str(e)}")
-        return api_response(
-            success=False,
-            error=str(e),
-            message="获取交易详情失败",
-            status_code=500
-        )
-
 @app.route('/api/chart-data')
 @handle_errors
 @log_request
