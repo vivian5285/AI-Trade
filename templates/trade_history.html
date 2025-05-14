@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-4">交易历史</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>交易所</th>
+                                    <th>交易对</th>
+                                    <th>方向</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>状态</th>
+                                    <th>策略</th>
+                                    <th>策略参数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for trade in trades %}
+                                <tr>
+                                    <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>{{ trade.exchange }}</td>
+                                    <td>{{ trade.symbol }}</td>
+                                    <td>
+                                        {% if trade.side == 'BUY' %}
+                                        <span class="badge bg-success">买入</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">卖出</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ trade.price }}</td>
+                                    <td>{{ trade.quantity }}</td>
+                                    <td>
+                                        {% if trade.status == 'OPEN' %}
+                                        <span class="badge bg-warning">进行中</span>
+                                        {% elif trade.status == 'CLOSED' %}
+                                        <span class="badge bg-success">已完成</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">已取消</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if trade.strategy %}
+                                        <span class="badge bg-info">{{ trade.strategy }}</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">手动</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if trade.strategy_params %}
+                                        <button type="button" class="btn btn-sm btn-outline-info" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#paramsModal{{ trade.id }}">
+                                            查看参数
+                                        </button>
+                                        
+                                        <!-- 参数详情模态框 -->
+                                        <div class="modal fade" id="paramsModal{{ trade.id }}" tabindex="-1">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">策略参数详情</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <pre class="mb-0">{{ trade.strategy_params | tojson(indent=2) }}</pre>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -47,6 +47,8 @@ class TradeHistory(db.Model):
     quantity = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), nullable=False)  # OPEN, CLOSED, CANCELLED
+    strategy = db.Column(db.String(20))
+    strategy_params = db.Column(db.String(255))
 
 # 确保实例文件夹存在
 try:
@@ -114,6 +116,14 @@ trading_bot_process = None
 # 交易机器人状态管理
 trading_bot_running = False
 
+# 在文件开头添加策略名称常量
+STRATEGY_NAMES = {
+    'scalping': '网格交易',
+    'supertrend': '超级趋势',
+    'rsi': 'RSI策略',
+    'bollinger_bands': '布林带策略'
+}
+
 # 路由：首页/仪表盘
 @app.route('/')
 def dashboard():
@@ -161,10 +171,28 @@ def api_keys():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # 路由：交易历史
-@app.route('/trades')
-def trades():
-    trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
-    return render_template('trades.html', trades=trades)
+@app.route('/trade_history')
+def trade_history():
+    try:
+        # 获取所有交易记录，按时间倒序排列
+        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
+        
+        # 处理策略参数显示
+        for trade in trades:
+            if trade.strategy_params:
+                try:
+                    # 将JSON字符串转换为Python对象
+                    params = json.loads(trade.strategy_params)
+                    # 格式化显示
+                    trade.strategy_params = json.dumps(params, indent=2, ensure_ascii=False)
+                except:
+                    trade.strategy_params = None
+        
+        return render_template('trade_history.html', trades=trades)
+    except Exception as e:
+        logger.error(f"获取交易历史失败: {str(e)}")
+        flash('获取交易历史失败', 'error')
+        return redirect(url_for('index'))
 
 # 路由：设置
 @app.route('/settings')
@@ -1018,7 +1046,7 @@ def get_kline_data():
             'error': str(e)
         }), 500
 
-# 修改策略检查函数，使用缓存的K线数据
+# 修改策略检查函数
 def check_strategy_conditions(symbol, timeframe='1m'):
     try:
         # 获取当前时间戳（每分钟更新一次）
@@ -1081,50 +1109,50 @@ def check_strategy_conditions(symbol, timeframe='1m'):
             
         # 初始化信号字典
         signals = {}
+        strategy_params = {}
         
         # 检查每个启用的策略
         for strategy in enabled_strategies:
             if strategy == 'scalping':
                 signals['scalping'] = check_scalping_strategy(df)
+                if signals['scalping']:
+                    strategy_params['scalping'] = {
+                        'grid_levels': position_info['grid_levels'],
+                        'grid_spacing': position_info['grid_spacing']
+                    }
             elif strategy == 'supertrend':
                 signals['supertrend'] = check_supertrend_strategy(df)
+                if signals['supertrend']:
+                    strategy_params['supertrend'] = {
+                        'period': 10,
+                        'multiplier': 3
+                    }
             elif strategy == 'rsi':
                 signals['rsi'] = check_rsi_strategy(df)
+                if signals['rsi']:
+                    strategy_params['rsi'] = {
+                        'period': 14,
+                        'overbought': 70,
+                        'oversold': 30
+                    }
             elif strategy == 'bollinger_bands':
                 signals['bollinger_bands'] = check_bollinger_bands_strategy(df)
-                
-        # 检查所有策略的信号是否一致
-        if not signals:
-            return None
-            
-        # 获取所有策略的信号
-        all_signals = list(signals.values())
+                if signals['bollinger_bands']:
+                    strategy_params['bollinger_bands'] = {
+                        'period': 20,
+                        'std_dev': 2
+                    }
         
-        # 如果所有策略都给出做多信号
-        if all(signal == 'BUY' for signal in all_signals):
-            logger.info(f"All strategies ({', '.join(enabled_strategies)}) indicate BUY signal for {symbol}")
-            return {
-                'signal': 'BUY',
-                'quantity': position_info['quantity'],
-                'position_size': position_info['position_size'],
-                'current_price': position_info['current_price']
-            }
-            
-        # 如果所有策略都给出做空信号
-        elif all(signal == 'SELL' for signal in all_signals):
-            logger.info(f"All strategies ({', '.join(enabled_strategies)}) indicate SELL signal for {symbol}")
-            return {
-                'signal': 'SELL',
-                'quantity': position_info['quantity'],
-                'position_size': position_info['position_size'],
-                'current_price': position_info['current_price']
-            }
-            
-        # 如果策略信号不一致
-        else:
-            logger.info(f"Conflicting signals from strategies for {symbol}: {signals}")
-            return None
-            
+        # 返回交易信号和策略参数
+        for strategy, signal in signals.items():
+            if signal:
+                return {
+                    'strategy': strategy,
+                    'signal': signal,
+                    'params': strategy_params.get(strategy, {})
+                }
+        
+        return None
     except Exception as e:
         logger.error(f"Error checking strategy conditions: {str(e)}")
         return None
@@ -1519,6 +1547,33 @@ def check_api_keys():
 @app.before_first_request
 def before_first_request():
     check_api_keys()
+
+# 修改交易执行函数
+def execute_trade(exchange, symbol, side, quantity, price, strategy=None, strategy_params=None):
+    try:
+        # 创建交易记录
+        trade = TradeHistory(
+            exchange=exchange,
+            symbol=symbol,
+            side=side,
+            price=price,
+            quantity=quantity,
+            status='OPEN',
+            strategy=strategy,
+            strategy_params=json.dumps(strategy_params) if strategy_params else None
+        )
+        db.session.add(trade)
+        db.session.commit()
+        
+        # 记录日志
+        strategy_name = STRATEGY_NAMES.get(strategy, '手动') if strategy else '手动'
+        logger.info(f"执行{strategy_name}交易: {exchange} {symbol} {side} {quantity}@{price}")
+        
+        return trade
+    except Exception as e:
+        logger.error(f"执行交易失败: {str(e)}")
+        db.session.rollback()
+        return None
 
 if __name__ == '__main__':
     # 修改为监听本地地址，让 Nginx 处理外部请求

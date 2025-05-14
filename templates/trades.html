@@ -34,6 +34,16 @@
                             </select>
                         </div>
                         <div class="col-md-2">
+                            <label for="strategy" class="form-label">策略</label>
+                            <select class="form-select" id="strategy" name="strategy">
+                                <option value="">全部</option>
+                                <option value="scalping">网格交易</option>
+                                <option value="supertrend">超级趋势</option>
+                                <option value="rsi">RSI策略</option>
+                                <option value="bollinger_bands">布林带策略</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
                             <label for="status" class="form-label">状态</label>
                             <select class="form-select" id="status" name="status">
                                 <option value="">全部</option>
@@ -75,6 +85,7 @@
                                     <th>方向</th>
                                     <th>价格</th>
                                     <th>数量</th>
+                                    <th>策略</th>
                                     <th>状态</th>
                                     <th>操作</th>
                                 </tr>
@@ -94,6 +105,13 @@
                                     </td>
                                     <td>{{ trade.price }}</td>
                                     <td>{{ trade.quantity }}</td>
+                                    <td>
+                                        {% if trade.strategy %}
+                                            <span class="badge bg-info">{{ trade.strategy }}</span>
+                                        {% else %}
+                                            <span class="text-muted">手动</span>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         {% if trade.status == 'OPEN' %}
                                             <span class="badge bg-warning">开仓</span>
@@ -171,6 +189,16 @@ function showTradeDetails(tradeId) {
                         
                         <dt class="col-sm-4">数量</dt>
                         <dd class="col-sm-8">${trade.quantity}</dd>
+                        
+                        <dt class="col-sm-4">策略</dt>
+                        <dd class="col-sm-8">${trade.strategy || '手动'}</dd>
+                        
+                        ${trade.strategy_params ? `
+                        <dt class="col-sm-4">策略参数</dt>
+                        <dd class="col-sm-8">
+                            <pre class="mb-0">${JSON.stringify(JSON.parse(trade.strategy_params), null, 2)}</pre>
+                        </dd>
+                        ` : ''}
                         
                         <dt class="col-sm-4">状态</dt>
                         <dd class="col-sm-8">
