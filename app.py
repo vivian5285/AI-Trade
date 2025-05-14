@@ -106,27 +106,62 @@ def trades():
 # 路由：设置
 @app.route('/settings')
 def settings():
-    config = load_config()
-    return render_template('settings.html', settings=config['trading_settings'])
+    # 从.env文件加载设置
+    settings = load_config()
+    
+    # 获取API密钥（只显示部分）
+    binance_api_key = os.getenv('BINANCE_API_KEY', '')
+    lbank_api_key = os.getenv('LBANK_API_KEY', '')
+    
+    # 获取当前选择的交易所
+    current_exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
+    
+    return render_template('settings.html', 
+                         settings=settings,
+                         binance_api_key=binance_api_key,
+                         lbank_api_key=lbank_api_key,
+                         current_exchange=current_exchange)
 
-# 路由：保存交易设置
-@app.route('/settings/trading', methods=['POST'])
-def save_trading_settings():
+# 路由：保存基础设置
+@app.route('/settings/basic', methods=['POST'])
+def save_basic_settings():
     try:
         # 更新环境变量
         os.environ['TRADING_PAIR'] = request.form.get('trading_pair')
         os.environ['LEVERAGE'] = request.form.get('leverage')
         os.environ['QUANTITY'] = request.form.get('quantity')
-        os.environ['STOP_LOSS_PERCENTAGE'] = request.form.get('stop_loss')
-        os.environ['TAKE_PROFIT_PERCENTAGE'] = request.form.get('take_profit')
         
         # 更新.env文件
         update_env_file({
             'TRADING_PAIR': request.form.get('trading_pair'),
             'LEVERAGE': request.form.get('leverage'),
-            'QUANTITY': request.form.get('quantity'),
-            'STOP_LOSS_PERCENTAGE': request.form.get('stop_loss'),
-            'TAKE_PROFIT_PERCENTAGE': request.form.get('take_profit')
+            'QUANTITY': request.form.get('quantity')
+        })
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+# 路由：保存策略设置
+@app.route('/settings/strategy', methods=['POST'])
+def save_strategy_settings():
+    try:
+        # 更新环境变量
+        os.environ['TREND_EMA_FAST'] = request.form.get('trend_ema_fast')
+        os.environ['TREND_EMA_SLOW'] = request.form.get('trend_ema_slow')
+        os.environ['GRID_SIZE'] = request.form.get('grid_size')
+        os.environ['GRID_SPACING'] = request.form.get('grid_spacing')
+        os.environ['SCALPING_PROFIT_TARGET'] = request.form.get('scalping_profit_target')
+        os.environ['SCALPING_STOP_LOSS'] = request.form.get('scalping_stop_loss')
+        
+        # 更新.env文件
+        update_env_file({
+            'TREND_EMA_FAST': request.form.get('trend_ema_fast'),
+            'TREND_EMA_SLOW': request.form.get('trend_ema_slow'),
+            'GRID_SIZE': request.form.get('grid_size'),
+            'GRID_SPACING': request.form.get('grid_spacing'),
+            'SCALPING_PROFIT_TARGET': request.form.get('scalping_profit_target'),
+            'SCALPING_STOP_LOSS': request.form.get('scalping_stop_loss')
         })
         
         return jsonify({'success': True})
@@ -174,6 +209,40 @@ def save_notification_settings():
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/settings/exchange', methods=['POST'])
+def save_exchange_settings():
+    try:
+        exchange = request.form.get('exchange')
+        if exchange not in ['binance', 'lbank']:
+            return jsonify({'success': False, 'error': '无效的交易所选择'})
+            
+        # 更新.env文件
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        env_vars = {}
+        
+        # 读取现有的.env文件
+        if os.path.exists(env_path):
+            with open(env_path, 'r') as f:
+                for line in f:
+                    if '=' in line:
+                        key, value = line.strip().split('=', 1)
+                        env_vars[key] = value
+        
+        # 更新交易所选择
+        env_vars['CURRENT_EXCHANGE'] = exchange
+        
+        # 写入.env文件
+        with open(env_path, 'w') as f:
+            for key, value in env_vars.items():
+                f.write(f'{key}={value}\n')
+        
+        # 更新环境变量
+        os.environ['CURRENT_EXCHANGE'] = exchange
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 def update_env_file(updates):
     """更新.env文件"""
@@ -232,14 +301,27 @@ def load_config():
         'lbank_api_key': os.getenv('BINANCE_API_KEY'),
         'lbank_api_secret': os.getenv('BINANCE_API_SECRET'),
         'trading_settings': {
+            # 基础交易设置
             'trading_pair': os.getenv('TRADING_PAIR', 'ETHUSDT'),
             'leverage': os.getenv('LEVERAGE', '50'),
             'quantity': os.getenv('QUANTITY', '0.2'),
-            'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
-            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6'),
-            'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '200'),
-            'max_daily_loss': os.getenv('MAX_DAILY_LOSS_PERCENTAGE', '8'),
-            'min_volume': os.getenv('MIN_VOLUME_THRESHOLD', '1000000'),
+            
+            # 高频交易策略参数
+            'trend_ema_fast': os.getenv('TREND_EMA_FAST', '1'),  # 1分钟快速EMA
+            'trend_ema_slow': os.getenv('TREND_EMA_SLOW', '3'),  # 3分钟慢速EMA
+            'grid_size': os.getenv('GRID_SIZE', '50'),  # 网格数量
+            'grid_spacing': os.getenv('GRID_SPACING', '0.05'),  # 网格间距0.05%
+            'scalping_profit_target': os.getenv('SCALPING_PROFIT_TARGET', '0.1'),  # 0.1%止盈
+            'scalping_stop_loss': os.getenv('SCALPING_STOP_LOSS', '0.05'),  # 0.05%止损
+            
+            # 风险控制参数
+            'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '0.2'),  # 0.2%止损
+            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.4'),  # 0.4%止盈
+            'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '500'),  # 每日最大交易次数
+            'max_daily_loss': os.getenv('MAX_DAILY_LOSS_PERCENTAGE', '5'),  # 每日最大亏损5%
+            'min_volume': os.getenv('MIN_VOLUME_THRESHOLD', '1000000'),  # 最小交易量100万USDT
+            
+            # 通知设置
             'notification_email': os.getenv('NOTIFICATION_EMAIL', ''),
             'telegram_bot_token': os.getenv('TELEGRAM_BOT_TOKEN', ''),
             'email_notifications': os.getenv('EMAIL_NOTIFICATIONS', 'false').lower() == 'true',

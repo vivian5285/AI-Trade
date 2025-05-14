@@ -9,16 +9,18 @@ from dotenv import load_dotenv
 import ta
 import logging
 from typing import List, Dict, Tuple
+import ccxt
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('trading.log'),
+        logging.FileHandler('trading_bot.log'),
         logging.StreamHandler()
     ]
 )
+logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv()
@@ -33,11 +35,32 @@ class GridLevel:
 
 class BinanceTradingBot:
     def __init__(self):
-        self.api_key = os.getenv('BINANCE_API_KEY')
-        self.api_secret = os.getenv('BINANCE_API_SECRET')
-        self.trading_pair = os.getenv('TRADING_PAIR')
-        self.leverage = int(os.getenv('LEVERAGE'))
-        self.quantity = float(os.getenv('QUANTITY'))
+        # 获取当前选择的交易所
+        self.exchange_name = os.getenv('CURRENT_EXCHANGE', 'binance')
+        
+        # 初始化交易所
+        if self.exchange_name == 'binance':
+            self.exchange = ccxt.binance({
+                'apiKey': os.getenv('BINANCE_API_KEY'),
+                'secret': os.getenv('BINANCE_API_SECRET'),
+                'enableRateLimit': True,
+                'options': {
+                    'defaultType': 'future'
+                }
+            })
+        elif self.exchange_name == 'lbank':
+            self.exchange = ccxt.lbank({
+                'apiKey': os.getenv('LBANK_API_KEY'),
+                'secret': os.getenv('LBANK_API_SECRET'),
+                'enableRateLimit': True
+            })
+        else:
+            raise ValueError(f"不支持的交易所: {self.exchange_name}")
+        
+        # 加载交易设置
+        self.trading_pair = os.getenv('TRADING_PAIR', 'ETHUSDT')
+        self.leverage = int(os.getenv('LEVERAGE', '50'))
+        self.quantity = float(os.getenv('QUANTITY', '0.001'))
         self.stop_loss_percentage = float(os.getenv('STOP_LOSS_PERCENTAGE'))
         self.take_profit_percentage = float(os.getenv('TAKE_PROFIT_PERCENTAGE'))
         self.max_daily_trades = int(os.getenv('MAX_DAILY_TRADES'))
@@ -49,9 +72,6 @@ class BinanceTradingBot:
         self.trend_ema_slow = int(os.getenv('TREND_EMA_SLOW'))
         self.scalping_profit_target = float(os.getenv('SCALPING_PROFIT_TARGET'))
         self.scalping_stop_loss = float(os.getenv('SCALPING_STOP_LOSS'))
-        
-        # 初始化币安客户端
-        self.client = Client(self.api_key, self.api_secret)
         
         # 设置杠杆
         self.set_leverage()
@@ -66,39 +86,43 @@ class BinanceTradingBot:
         self.grid_levels: List[GridLevel] = []
         self.active_orders: Dict[str, Dict] = {}
         
-        logging.info(f"交易机器人初始化完成 - 初始余额: {self.initial_balance} USDT")
+        logger.info(f"交易机器人初始化完成 - 交易所: {self.exchange_name}, 交易对: {self.trading_pair}, 杠杆: {self.leverage}x")
 
     def get_account_balance(self):
         """获取账户余额"""
         try:
-            account = self.client.futures_account_balance()
-            for balance in account:
-                if balance['asset'] == 'USDT':
-                    return float(balance['balance'])
+            balance = self.exchange.fetch_balance()
+            for asset, info in balance.items():
+                if asset == 'USDT':
+                    return float(info['free'])
             return 0
         except Exception as e:
-            logging.error(f"获取账户余额失败: {e}")
+            logger.error(f"获取账户余额失败: {str(e)}")
             return 0
 
     def set_leverage(self):
         """设置合约杠杆"""
         try:
-            self.client.futures_change_leverage(
-                symbol=self.trading_pair,
-                leverage=self.leverage
-            )
-            logging.info(f"杠杆设置成功: {self.leverage}x")
+            if self.exchange_name == 'binance':
+                self.exchange.fapiPrivate_post_leverage({
+                    'symbol': self.trading_pair,
+                    'leverage': self.leverage
+                })
+            elif self.exchange_name == 'lbank':
+                # LBank的杠杆设置API
+                self.exchange.private_post_leverage({
+                    'symbol': self.trading_pair,
+                    'leverage': self.leverage
+                })
+            logger.info(f"杠杆设置成功: {self.leverage}x")
         except Exception as e:
-            logging.error(f"设置杠杆失败: {e}")
+            logger.error(f"设置杠杆失败: {str(e)}")
+            raise
 
     def get_historical_data(self, interval='1m', limit=100):
         """获取历史K线数据"""
         try:
-            klines = self.client.futures_klines(
-                symbol=self.trading_pair,
-                interval=interval,
-                limit=limit
-            )
+            klines = self.exchange.fetch_ohlcv(self.trading_pair, interval, limit)
             
             df = pd.DataFrame(klines, columns=[
                 'timestamp', 'open', 'high', 'low', 'close', 'volume',
@@ -113,7 +137,7 @@ class BinanceTradingBot:
             
             return df
         except Exception as e:
-            logging.error(f"获取历史数据失败: {e}")
+            logger.error(f"获取历史数据失败: {str(e)}")
             return None
 
     def calculate_indicators(self, df):
@@ -151,7 +175,7 @@ class BinanceTradingBot:
             
             return df
         except Exception as e:
-            logging.error(f"计算指标失败: {e}")
+            logger.error(f"计算指标失败: {str(e)}")
             return None
 
     def check_trend(self, df) -> str:
@@ -168,7 +192,7 @@ class BinanceTradingBot:
             else:
                 return 'SIDEWAYS'
         except Exception as e:
-            logging.error(f"检查趋势失败: {e}")
+            logger.error(f"检查趋势失败: {str(e)}")
             return 'UNKNOWN'
 
     def setup_grid(self, current_price: float):
@@ -190,30 +214,29 @@ class BinanceTradingBot:
             self.place_grid_orders()
             
         except Exception as e:
-            logging.error(f"设置网格失败: {e}")
+            logger.error(f"设置网格失败: {str(e)}")
 
     def place_grid_orders(self):
         """放置网格订单"""
         try:
             for level in self.grid_levels:
                 if not level.filled:
-                    order = self.client.futures_create_order(
+                    order = self.exchange.create_order(
                         symbol=self.trading_pair,
+                        type='limit',
                         side=level.side,
-                        type='LIMIT',
-                        timeInForce='GTC',
-                        quantity=level.quantity,
+                        amount=level.quantity,
                         price=level.price
                     )
-                    level.order_id = order['orderId']
-                    self.active_orders[order['orderId']] = {
+                    level.order_id = order['id']
+                    self.active_orders[str(order['id'])] = {
                         'price': level.price,
                         'side': level.side,
                         'quantity': level.quantity
                     }
-                    logging.info(f"网格订单放置成功: {level.side} @ {level.price}")
+                    logger.info(f"网格订单放置成功: {level.side} @ {level.price}")
         except Exception as e:
-            logging.error(f"放置网格订单失败: {e}")
+            logger.error(f"放置网格订单失败: {str(e)}")
 
     def check_scalping_opportunity(self, df) -> Tuple[bool, str]:
         """检查剥头皮交易机会"""
@@ -233,15 +256,15 @@ class BinanceTradingBot:
             
             return False, None
         except Exception as e:
-            logging.error(f"检查剥头皮机会失败: {e}")
+            logger.error(f"检查剥头皮机会失败: {str(e)}")
             return False, None
 
     def execute_scalping_trade(self, side: str):
         """执行剥头皮交易"""
         try:
             # 获取当前价格
-            ticker = self.client.futures_symbol_ticker(symbol=self.trading_pair)
-            current_price = float(ticker['price'])
+            ticker = self.exchange.fetch_ticker(self.trading_pair)
+            current_price = float(ticker['last'])
             
             # 计算止盈止损价格
             if side == 'BUY':
@@ -252,38 +275,38 @@ class BinanceTradingBot:
                 stop_loss = current_price * (1 + self.scalping_stop_loss / 100)
             
             # 执行交易
-            order = self.client.futures_create_order(
+            order = self.exchange.create_order(
                 symbol=self.trading_pair,
+                type='market',
                 side=side,
-                type='MARKET',
-                quantity=self.quantity
+                amount=self.quantity
             )
             
             # 设置止盈止损
-            self.client.futures_create_order(
+            self.exchange.create_order(
                 symbol=self.trading_pair,
-                side='SELL' if side == 'BUY' else 'BUY',
                 type='TAKE_PROFIT_MARKET',
-                stopPrice=take_profit,
-                closePosition=True
-            )
-            
-            self.client.futures_create_order(
-                symbol=self.trading_pair,
                 side='SELL' if side == 'BUY' else 'BUY',
-                type='STOP_MARKET',
-                stopPrice=stop_loss,
-                closePosition=True
+                amount=self.quantity,
+                price=take_profit
             )
             
-            logging.info(f"剥头皮交易执行成功: {side} @ {current_price}")
+            self.exchange.create_order(
+                symbol=self.trading_pair,
+                type='STOP_MARKET',
+                side='SELL' if side == 'BUY' else 'BUY',
+                amount=self.quantity,
+                price=stop_loss
+            )
+            
+            logger.info(f"剥头皮交易执行成功: {side} @ {current_price}")
             
         except Exception as e:
-            logging.error(f"执行剥头皮交易失败: {e}")
+            logger.error(f"执行剥头皮交易失败: {str(e)}")
 
     def run(self):
         """运行交易机器人"""
-        logging.info("交易机器人启动...")
+        logger.info("交易机器人启动...")
         last_reset_time = datetime.now().date()
         
         while True:
@@ -327,19 +350,16 @@ class BinanceTradingBot:
                 time.sleep(15)
                 
             except Exception as e:
-                logging.error(f"运行错误: {e}")
+                logger.error(f"运行错误: {str(e)}")
                 time.sleep(60)
 
     def check_grid_orders(self):
         """检查网格订单状态"""
         try:
             for order_id, order_info in list(self.active_orders.items()):
-                order_status = self.client.futures_get_order(
-                    symbol=self.trading_pair,
-                    orderId=order_id
-                )
+                order = self.exchange.fetch_order(self.trading_pair, order_id)
                 
-                if order_status['status'] == 'FILLED':
+                if order['status'] == 'FILLED':
                     # 订单已成交，执行对冲订单
                     self.execute_hedge_order(order_info)
                     del self.active_orders[order_id]
@@ -354,28 +374,28 @@ class BinanceTradingBot:
                     self.place_grid_orders()
                     
         except Exception as e:
-            logging.error(f"检查网格订单状态失败: {e}")
+            logger.error(f"检查网格订单状态失败: {str(e)}")
 
     def execute_hedge_order(self, order_info: Dict):
         """执行对冲订单"""
         try:
             hedge_side = 'SELL' if order_info['side'] == 'BUY' else 'BUY'
-            self.client.futures_create_order(
+            self.exchange.create_order(
                 symbol=self.trading_pair,
+                type='market',
                 side=hedge_side,
-                type='MARKET',
-                quantity=order_info['quantity']
+                amount=order_info['quantity']
             )
-            logging.info(f"对冲订单执行成功: {hedge_side} @ {order_info['price']}")
+            logger.info(f"对冲订单执行成功: {hedge_side} @ {order_info['price']}")
         except Exception as e:
-            logging.error(f"执行对冲订单失败: {e}")
+            logger.error(f"执行对冲订单失败: {str(e)}")
 
     def reset_daily_stats(self):
         """重置每日统计数据"""
         self.daily_trades = 0
         self.daily_pnl = 0
         self.initial_balance = self.get_account_balance()
-        logging.info("每日统计数据已重置")
+        logger.info("每日统计数据已重置")
 
     async def check_trading_opportunity(self, best_bid: float, best_ask: float):
         """检查交易机会"""
@@ -405,7 +425,7 @@ class BinanceTradingBot:
                 await self.execute_trade(side, best_bid, best_ask)
                 
         except Exception as e:
-            logging.error(f"检查交易机会错误: {e}")
+            logger.error(f"检查交易机会错误: {str(e)}")
             
     def calculate_order_flow(self) -> float:
         """计算订单流"""
@@ -423,7 +443,7 @@ class BinanceTradingBot:
             return order_flow
             
         except Exception as e:
-            logging.error(f"计算订单流错误: {e}")
+            logger.error(f"计算订单流错误: {str(e)}")
             return 0.0
             
     def calculate_volatility(self) -> float:
@@ -433,7 +453,7 @@ class BinanceTradingBot:
                 return 0.0
                 
             # 计算价格变化
-            prices = [float(kline['close']) for kline in self.klines_buffer]
+            prices = [float(kline[4]) for kline in self.klines_buffer]
             returns = np.diff(prices) / prices[:-1]
             
             # 计算波动率
@@ -442,7 +462,7 @@ class BinanceTradingBot:
             return volatility
             
         except Exception as e:
-            logging.error(f"计算波动率错误: {e}")
+            logger.error(f"计算波动率错误: {str(e)}")
             return 0.0
             
     def calculate_momentum(self) -> float:
@@ -452,13 +472,13 @@ class BinanceTradingBot:
                 return 0.0
                 
             # 计算价格动量
-            prices = [float(kline['close']) for kline in self.klines_buffer]
+            prices = [float(kline[4]) for kline in self.klines_buffer]
             momentum = (prices[-1] - prices[0]) / prices[0]
             
             return momentum
             
         except Exception as e:
-            logging.error(f"计算动量错误: {e}")
+            logger.error(f"计算动量错误: {str(e)}")
             return 0.0
             
     def generate_signal(self, price_pressure: float, order_flow: float, 
@@ -487,7 +507,7 @@ class BinanceTradingBot:
             return signal
             
         except Exception as e:
-            logging.error(f"生成信号错误: {e}")
+            logger.error(f"生成信号错误: {str(e)}")
             return 0.0
             
     async def execute_trade(self, side: str, bid: float, ask: float):
@@ -504,10 +524,9 @@ class BinanceTradingBot:
             # 构建订单
             order = {
                 'symbol': self.trading_pair,
+                'type': 'limit',
                 'side': side,
-                'type': 'LIMIT',
-                'timeInForce': 'IOC',
-                'quantity': quantity,
+                'amount': quantity,
                 'price': price
             }
             
@@ -525,7 +544,7 @@ class BinanceTradingBot:
                 self.set_dynamic_take_profit_stop_loss(side, price)
                 
         except Exception as e:
-            logging.error(f"执行交易错误: {e}")
+            logger.error(f"执行交易错误: {str(e)}")
             
     def calculate_position_size(self, price: float) -> float:
         """计算仓位大小"""
@@ -548,7 +567,7 @@ class BinanceTradingBot:
             return position_size
             
         except Exception as e:
-            logging.error(f"计算仓位大小错误: {e}")
+            logger.error(f"计算仓位大小错误: {str(e)}")
             return self.quantity
             
     def set_dynamic_take_profit_stop_loss(self, side: str, entry_price: float):
@@ -571,25 +590,25 @@ class BinanceTradingBot:
                 
             # 发送止盈止损订单
             self.executor.submit(
-                self.client.futures_create_order,
+                self.exchange.create_order,
                 symbol=self.trading_pair,
-                side='SELL' if side == 'BUY' else 'BUY',
                 type='TAKE_PROFIT_MARKET',
-                stopPrice=take_profit,
-                closePosition=True
+                side='SELL' if side == 'BUY' else 'BUY',
+                amount=self.quantity,
+                price=take_profit
             )
             
             self.executor.submit(
-                self.client.futures_create_order,
+                self.exchange.create_order,
                 symbol=self.trading_pair,
-                side='SELL' if side == 'BUY' else 'BUY',
                 type='STOP_MARKET',
-                stopPrice=stop_loss,
-                closePosition=True
+                side='SELL' if side == 'BUY' else 'BUY',
+                amount=self.quantity,
+                price=stop_loss
             )
             
         except Exception as e:
-            logging.error(f"设置动态止盈止损错误: {e}")
+            logger.error(f"设置动态止盈止损错误: {str(e)}")
 
 if __name__ == "__main__":
     bot = BinanceTradingBot()
