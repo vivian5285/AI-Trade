@@ -95,7 +95,7 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/dashboard#trading-bot" id="tradingBotControl">
+                            <a class="nav-link" href="#" id="tradingBotControl">
                                 <i class="fas fa-robot"></i> 交易机器人
                             </a>
                         </li>
@@ -123,13 +123,17 @@
         // 处理交易机器人链接点击
         document.getElementById('tradingBotControl').addEventListener('click', function(e) {
             e.preventDefault();
-            window.location.href = '/dashboard#trading-bot';
-            // 如果已经在仪表盘页面，滚动到交易机器人部分
-            if (window.location.pathname === '/dashboard') {
+            
+            // 检查是否在仪表盘页面
+            if (window.location.pathname === '/') {
+                // 如果已经在仪表盘页面，滚动到交易机器人部分
                 const tradingBotSection = document.querySelector('#trading-bot');
                 if (tradingBotSection) {
                     tradingBotSection.scrollIntoView({ behavior: 'smooth' });
                 }
+            } else {
+                // 如果不在仪表盘页面，先跳转到仪表盘
+                window.location.href = '/';
             }
         });
     });
