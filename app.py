@@ -202,8 +202,17 @@ STRATEGY_NAMES = {
     'bollinger_bands': '布林带策略'
 }
 
-# 路由：首页/仪表盘
+# 路由：首页
 @app.route('/')
+def index():
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Error loading index page: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+# 路由：仪表盘
+@app.route('/dashboard')
 def dashboard():
     try:
         api_keys = APIKey.query.all()
@@ -211,6 +220,62 @@ def dashboard():
         return render_template('dashboard.html', api_keys=api_keys, trades=trades)
     except Exception as e:
         logger.error(f"Error in dashboard route: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+# 路由：交易记录
+@app.route('/trades')
+def trades():
+    try:
+        # 获取所有交易记录，按时间倒序排列
+        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
+        
+        # 处理策略参数显示
+        for trade in trades:
+            if trade.strategy_params:
+                try:
+                    # 将JSON字符串转换为Python对象
+                    params = json.loads(trade.strategy_params)
+                    # 格式化显示
+                    trade.strategy_params = json.dumps(params, indent=2, ensure_ascii=False)
+                except:
+                    trade.strategy_params = None
+        
+        return render_template('trades.html', trades=trades)
+    except Exception as e:
+        logger.error(f"获取交易记录失败: {str(e)}")
+        flash('获取交易记录失败', 'error')
+        return redirect(url_for('index'))
+
+# 路由：系统配置
+@app.route('/config')
+def config():
+    try:
+        # 获取当前配置
+        config = {
+            'trading_settings': {
+                'exchange': os.getenv('CURRENT_EXCHANGE', 'binance'),
+                'trading_pair': os.getenv('TRADING_PAIR', 'BTCUSDT'),
+                'leverage': os.getenv('LEVERAGE', '10'),
+                'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
+                'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6'),
+                'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '100')
+            },
+            'strategy_settings': {
+                'rsi_period': os.getenv('RSI_PERIOD', '14'),
+                'rsi_overbought': os.getenv('RSI_OVERBOUGHT', '70'),
+                'rsi_oversold': os.getenv('RSI_OVERSOLD', '30'),
+                'bb_period': os.getenv('BB_PERIOD', '20'),
+                'bb_std': os.getenv('BB_STD', '2.0'),
+                'supertrend_atr_period': os.getenv('SUPERTREND_ATR_PERIOD', '10'),
+                'supertrend_atr_multiplier': os.getenv('SUPERTREND_ATR_MULTIPLIER', '3.0'),
+                'grid_count': os.getenv('GRID_COUNT', '10'),
+                'grid_spacing': os.getenv('GRID_SPACING', '0.5')
+            }
+        }
+        
+        return render_template('config.html', config=config)
+    except Exception as e:
+        logger.error(f"Error loading config page: {str(e)}")
         return render_template('error.html', error=str(e)), 500
 
 # 路由：API密钥管理
@@ -1581,36 +1646,39 @@ def create_trading_bot():
 @app.route('/api/trading-bots/<int:bot_id>', methods=['GET'])
 def get_trading_bot(bot_id):
     try:
-        db = get_db()
-        bot = db.execute('''
-            SELECT id, name, exchange, trading_pair, status, strategies, funds,
-                   leverage, stop_loss, take_profit, max_daily_trades, performance
-            FROM trading_bots
-            WHERE id = ?
-        ''', (bot_id,)).fetchone()
-        
+        bot = TradingBotConfig.query.get(bot_id)
         if not bot:
-            return jsonify({'success': False, 'error': '机器人不存在'})
+            return api_response(
+                success=False,
+                error="机器人不存在",
+                message="找不到指定的机器人",
+                status_code=404
+            )
         
-        return jsonify({
-            'success': True,
-            'bot': {
-                'id': bot['id'],
-                'name': bot['name'],
-                'exchange': bot['exchange'],
-                'trading_pair': bot['trading_pair'],
-                'status': bot['status'],
-                'strategies': json.loads(bot['strategies']),
-                'funds': bot['funds'],
-                'leverage': bot['leverage'],
-                'stop_loss': bot['stop_loss'],
-                'take_profit': bot['take_profit'],
-                'max_daily_trades': bot['max_daily_trades'],
-                'performance': json.loads(bot['performance']) if bot['performance'] else None
+        return api_response(
+            data={
+                'id': bot.id,
+                'name': bot.name,
+                'exchange': bot.exchange,
+                'trading_pair': bot.trading_pair,
+                'status': bot.status,
+                'strategies': json.loads(bot.strategies) if bot.strategies else [],
+                'funds': bot.funds,
+                'leverage': bot.leverage,
+                'stop_loss': bot.stop_loss,
+                'take_profit': bot.take_profit,
+                'max_daily_trades': bot.max_daily_trades,
+                'performance': json.loads(bot.performance) if bot.performance else None
             }
-        })
+        )
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        logger.error(f"Error getting trading bot: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取机器人信息失败",
+            status_code=500
+        )
 
 @app.route('/api/trading-bots/<int:bot_id>', methods=['PUT'])
 def update_trading_bot(bot_id):
