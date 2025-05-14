@@ -572,5 +572,30 @@ def toggle_api_key(key_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    try:
+        # 从.env文件加载设置
+        settings = load_config()
+        
+        # 获取当前选择的交易所
+        current_exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
+        
+        # 获取策略启用状态
+        settings['trading_settings'].update({
+            'exchange': current_exchange,
+            'scalpingEnabled': os.getenv('SCALPING_ENABLED', 'false'),
+            'supertrendEnabled': os.getenv('SUPERTREND_ENABLED', 'false'),
+            'rsiEnabled': os.getenv('RSI_ENABLED', 'false'),
+            'bbEnabled': os.getenv('BB_ENABLED', 'false'),
+            'ichimokuEnabled': os.getenv('ICHIMOKU_ENABLED', 'false'),
+            'vwapEnabled': os.getenv('VWAP_ENABLED', 'false')
+        })
+        
+        return jsonify(settings['trading_settings'])
+    except Exception as e:
+        logger.error(f"Error getting settings: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
