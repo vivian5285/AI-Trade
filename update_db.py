@@ -10,18 +10,24 @@ def update_database():
     cursor = conn.cursor()
     
     try:
-        # 添加新列
-        cursor.execute('ALTER TABLE trade_history ADD COLUMN strategy VARCHAR(20)')
-        cursor.execute('ALTER TABLE trade_history ADD COLUMN strategy_params VARCHAR(255)')
+        # 检查列是否存在
+        cursor.execute("PRAGMA table_info(trade_history)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        # 如果列不存在，则添加
+        if 'strategy' not in columns:
+            cursor.execute('ALTER TABLE trade_history ADD COLUMN strategy VARCHAR(20)')
+            print("已添加 strategy 列")
+            
+        if 'strategy_params' not in columns:
+            cursor.execute('ALTER TABLE trade_history ADD COLUMN strategy_params VARCHAR(255)')
+            print("已添加 strategy_params 列")
         
         # 提交更改
         conn.commit()
         print("数据库更新成功！")
     except sqlite3.OperationalError as e:
-        if "duplicate column name" in str(e):
-            print("列已存在，无需更新。")
-        else:
-            print(f"更新数据库时出错: {e}")
+        print(f"更新数据库时出错: {e}")
     finally:
         # 关闭连接
         conn.close()
