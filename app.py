@@ -13,6 +13,7 @@ import hmac
 import hashlib
 import time
 import logging
+import subprocess
 
 # 加载环境变量
 load_dotenv()
@@ -629,5 +630,68 @@ def get_settings():
         logger.error(f"Error getting settings: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/trading-bot/status')
+def get_trading_bot_status():
+    """获取交易机器人状态"""
+    try:
+        result = subprocess.run(['systemctl', 'is-active', 'trading-bot'], 
+                              capture_output=True, text=True)
+        is_running = result.stdout.strip() == 'active'
+        return jsonify({
+            'success': True,
+            'is_running': is_running
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/trading-bot/start', methods=['POST'])
+def start_trading_bot():
+    """启动交易机器人"""
+    try:
+        subprocess.run(['systemctl', 'start', 'trading-bot'], check=True)
+        return jsonify({
+            'success': True,
+            'message': '交易机器人已启动'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/trading-bot/stop', methods=['POST'])
+def stop_trading_bot():
+    """停止交易机器人"""
+    try:
+        subprocess.run(['systemctl', 'stop', 'trading-bot'], check=True)
+        return jsonify({
+            'success': True,
+            'message': '交易机器人已停止'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/trading-bot/restart', methods=['POST'])
+def restart_trading_bot():
+    """重启交易机器人"""
+    try:
+        subprocess.run(['systemctl', 'restart', 'trading-bot'], check=True)
+        return jsonify({
+            'success': True,
+            'message': '交易机器人已重启'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    # 修改为监听本地地址，让 Nginx 处理外部请求
+    app.run(host='127.0.0.1', port=5000, debug=False) 

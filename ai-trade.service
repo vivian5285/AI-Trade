@@ -1,0 +1,14 @@
+[Unit]
+Description=AI Trade Application
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/AI-Trade
+Environment="PATH=/root/AI-Trade/venv/bin"
+ExecStart=/root/AI-Trade/venv/bin/python app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target 
