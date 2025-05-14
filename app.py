@@ -207,6 +207,33 @@ def trade_history():
         flash('获取交易历史失败', 'error')
         return redirect(url_for('index'))
 
+# 添加获取单个交易详情的路由
+@app.route('/trade_history/<int:trade_id>')
+def get_trade_details(trade_id):
+    try:
+        trade = TradeHistory.query.get_or_404(trade_id)
+        return jsonify({
+            'success': True,
+            'trade': {
+                'id': trade.id,
+                'exchange': trade.exchange,
+                'symbol': trade.symbol,
+                'side': trade.side,
+                'price': trade.price,
+                'quantity': trade.quantity,
+                'timestamp': trade.timestamp.isoformat(),
+                'status': trade.status,
+                'strategy': trade.strategy,
+                'strategy_params': trade.strategy_params
+            }
+        })
+    except Exception as e:
+        logger.error(f"获取交易详情失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # 路由：设置
 @app.route('/settings')
 def settings():

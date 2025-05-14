@@ -165,7 +165,7 @@ document.getElementById('filterForm').addEventListener('submit', function(e) {
 
 // 显示交易详情
 function showTradeDetails(tradeId) {
-    fetch(`/trades/${tradeId}`)
+    fetch(`/trade_history/${tradeId}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -202,8 +202,9 @@ function showTradeDetails(tradeId) {
                         
                         <dt class="col-sm-4">状态</dt>
                         <dd class="col-sm-8">
-                            ${trade.status === 'OPEN' ? '开仓' : 
-                              trade.status === 'CLOSED' ? '平仓' : '取消'}
+                            ${trade.status === 'OPEN' ? '<span class="badge bg-warning">进行中</span>' :
+                              trade.status === 'CLOSED' ? '<span class="badge bg-success">已完成</span>' :
+                              '<span class="badge bg-danger">已取消</span>'}
                         </dd>
                         
                         <dt class="col-sm-4">时间</dt>
@@ -213,8 +214,12 @@ function showTradeDetails(tradeId) {
                 document.getElementById('tradeDetails').innerHTML = details;
                 new bootstrap.Modal(document.getElementById('tradeDetailsModal')).show();
             } else {
-                alert('获取交易详情失败：' + data.message);
+                alert('获取交易详情失败：' + data.error);
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('获取交易详情失败');
         });
 }
 </script>
