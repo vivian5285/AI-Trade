@@ -78,18 +78,6 @@
                                     <label class="form-check-label" for="bbEnabled">布林带 + 成交量</label>
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="ichimokuEnabled" name="ichimokuEnabled">
-                                    <label class="form-check-label" for="ichimokuEnabled">一目均衡表</label>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="vwapEnabled" name="vwapEnabled">
-                                    <label class="form-check-label" for="vwapEnabled">VWAP + EMA</label>
-                                </div>
-                            </div>
                         </div>
                         <button type="submit" class="btn btn-primary">保存策略选择</button>
                     </form>
@@ -98,37 +86,52 @@
         </div>
     </div>
 
-    <!-- 基础交易设置 -->
+    <!-- 基础设置卡片 -->
     <div class="row mb-4">
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">基础交易设置</h5>
+                    <h5 class="mb-0">基础设置</h5>
                 </div>
                 <div class="card-body">
-                    <form id="basicForm">
+                    <form id="basicSettingsForm">
                         <div class="row">
                             <div class="col-md-4">
-                                <div class="form-group">
+                                <div class="form-group mb-3">
                                     <label for="tradingPair">交易对</label>
-                                    <select class="form-control" id="tradingPair" name="tradingPair">
-                                        <option value="ETHUSDT">ETH/USDT</option>
-                                        <option value="BTCUSDT">BTC/USDT</option>
-                                        <option value="BNBUSDT">BNB/USDT</option>
-                                        <option value="SOLUSDT">SOL/USDT</option>
-                                    </select>
+                                    <input type="text" class="form-control" id="tradingPair" name="tradingPair" value="{{ env.get('TRADING_PAIR', 'BTCUSDT') }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <div class="form-group">
+                                <div class="form-group mb-3">
                                     <label for="leverage">杠杆倍数</label>
-                                    <input type="number" class="form-control" id="leverage" name="leverage" min="1" max="125" value="50">
+                                    <input type="number" class="form-control" id="leverage" name="leverage" value="{{ env.get('LEVERAGE', '10') }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <div class="form-group">
-                                    <label for="quantity">交易数量</label>
-                                    <input type="number" class="form-control" id="quantity" name="quantity" min="0.001" step="0.001" value="0.001">
+                                <div class="form-group mb-3">
+                                    <label for="quantity">每次下单数量</label>
+                                    <input type="number" step="0.0001" class="form-control" id="quantity" name="quantity" value="{{ env.get('QUANTITY', '0.001') }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="stopLoss">止损百分比 (%)</label>
+                                    <input type="number" step="0.01" class="form-control" id="stopLoss" name="stopLoss" value="{{ env.get('STOP_LOSS_PERCENTAGE', '0.3') }}">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="takeProfit">止盈百分比 (%)</label>
+                                    <input type="number" step="0.01" class="form-control" id="takeProfit" name="takeProfit" value="{{ env.get('TAKE_PROFIT_PERCENTAGE', '0.6') }}">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="maxDailyTrades">每日最大交易次数</label>
+                                    <input type="number" class="form-control" id="maxDailyTrades" name="maxDailyTrades" value="{{ env.get('MAX_DAILY_TRADES', '100') }}">
                                 </div>
                             </div>
                         </div>
@@ -138,263 +141,119 @@
             </div>
         </div>
     </div>
-
-    <!-- 策略参数设置 -->
-    <div class="row">
-        <!-- RSI + MACD + EMA 策略参数 -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">RSI + MACD + EMA 策略参数</h5>
-                </div>
-                <div class="card-body">
-                    <form id="rsiForm">
-                        <div class="form-group">
-                            <label for="rsiPeriod">RSI周期</label>
-                            <input type="number" class="form-control" id="rsiPeriod" name="rsiPeriod" value="14">
-                        </div>
-                        <div class="form-group">
-                            <label for="rsiOverbought">RSI超买值</label>
-                            <input type="number" class="form-control" id="rsiOverbought" name="rsiOverbought" value="70">
-                        </div>
-                        <div class="form-group">
-                            <label for="rsiOversold">RSI超卖值</label>
-                            <input type="number" class="form-control" id="rsiOversold" name="rsiOversold" value="30">
-                        </div>
-                        <div class="form-group">
-                            <label for="macdFast">MACD快线</label>
-                            <input type="number" class="form-control" id="macdFast" name="macdFast" value="12">
-                        </div>
-                        <div class="form-group">
-                            <label for="macdSlow">MACD慢线</label>
-                            <input type="number" class="form-control" id="macdSlow" name="macdSlow" value="26">
-                        </div>
-                        <button type="submit" class="btn btn-primary">保存RSI参数</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- 布林带 + 成交量策略参数 -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">布林带 + 成交量策略参数</h5>
-                </div>
-                <div class="card-body">
-                    <form id="bbForm">
-                        <div class="form-group">
-                            <label for="bbPeriod">布林带周期</label>
-                            <input type="number" class="form-control" id="bbPeriod" name="bbPeriod" value="20">
-                        </div>
-                        <div class="form-group">
-                            <label for="bbStdDev">标准差倍数</label>
-                            <input type="number" class="form-control" id="bbStdDev" name="bbStdDev" value="2">
-                        </div>
-                        <div class="form-group">
-                            <label for="volumeProfilePeriod">成交量分布周期</label>
-                            <input type="number" class="form-control" id="volumeProfilePeriod" name="volumeProfilePeriod" value="24">
-                        </div>
-                        <button type="submit" class="btn btn-primary">保存布林带参数</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- 一目均衡表策略参数 -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">一目均衡表策略参数</h5>
-                </div>
-                <div class="card-body">
-                    <form id="ichimokuForm">
-                        <div class="form-group">
-                            <label for="ichimokuTenkan">转换线周期</label>
-                            <input type="number" class="form-control" id="ichimokuTenkan" name="ichimokuTenkan" value="9">
-                        </div>
-                        <div class="form-group">
-                            <label for="ichimokuKijun">基准线周期</label>
-                            <input type="number" class="form-control" id="ichimokuKijun" name="ichimokuKijun" value="26">
-                        </div>
-                        <div class="form-group">
-                            <label for="ichimokuSenkouB">先行带B周期</label>
-                            <input type="number" class="form-control" id="ichimokuSenkouB" name="ichimokuSenkouB" value="52">
-                        </div>
-                        <button type="submit" class="btn btn-primary">保存一目均衡表参数</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- VWAP + EMA 策略参数 -->
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">VWAP + EMA 策略参数</h5>
-                </div>
-                <div class="card-body">
-                    <form id="vwapForm">
-                        <div class="form-group">
-                            <label for="vwapPeriod">VWAP周期</label>
-                            <input type="number" class="form-control" id="vwapPeriod" name="vwapPeriod" value="14">
-                        </div>
-                        <div class="form-group">
-                            <label for="vwapDeviation">VWAP偏差</label>
-                            <input type="number" class="form-control" id="vwapDeviation" name="vwapDeviation" value="2">
-                        </div>
-                        <div class="form-group">
-                            <label for="vwapEmaFast">VWAP EMA快线</label>
-                            <input type="number" class="form-control" id="vwapEmaFast" name="vwapEmaFast" value="8">
-                        </div>
-                        <div class="form-group">
-                            <label for="vwapEmaSlow">VWAP EMA慢线</label>
-                            <input type="number" class="form-control" id="vwapEmaSlow" name="vwapEmaSlow" value="21">
-                        </div>
-                        <button type="submit" class="btn btn-primary">保存VWAP参数</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
+// 加载设置
 document.addEventListener('DOMContentLoaded', function() {
-    // 加载当前设置
+    // 加载交易所选择
     fetch('/api/settings')
         .then(response => response.json())
         .then(data => {
-            // 设置交易所选择
-            document.querySelector(`input[name="exchange"][value="${data.exchange}"]`).checked = true;
-            
-            // 设置基础参数
-            document.getElementById('tradingPair').value = data.tradingPair || 'ETHUSDT';
-            document.getElementById('leverage').value = data.leverage || 50;
-            document.getElementById('quantity').value = data.quantity || 0.001;
-            
-            // 设置策略启用状态
-            document.getElementById('scalpingEnabled').checked = data.scalpingEnabled === 'true';
-            document.getElementById('supertrendEnabled').checked = data.supertrendEnabled === 'true';
-            document.getElementById('rsiEnabled').checked = data.rsiEnabled === 'true';
-            document.getElementById('bbEnabled').checked = data.bbEnabled === 'true';
-            document.getElementById('ichimokuEnabled').checked = data.ichimokuEnabled === 'true';
-            document.getElementById('vwapEnabled').checked = data.vwapEnabled === 'true';
-            
-            // 设置策略参数
-            if (data.rsiEnabled === 'true') {
-                document.getElementById('rsiPeriod').value = data.rsiPeriod || 14;
-                document.getElementById('rsiOverbought').value = data.rsiOverbought || 70;
-                document.getElementById('rsiOversold').value = data.rsiOversold || 30;
-                document.getElementById('macdFast').value = data.macdFast || 12;
-                document.getElementById('macdSlow').value = data.macdSlow || 26;
-            }
-            
-            if (data.bbEnabled === 'true') {
-                document.getElementById('bbPeriod').value = data.bbPeriod || 20;
-                document.getElementById('bbStdDev').value = data.bbStdDev || 2;
-                document.getElementById('volumeProfilePeriod').value = data.volumeProfilePeriod || 24;
-            }
-            
-            if (data.ichimokuEnabled === 'true') {
-                document.getElementById('ichimokuTenkan').value = data.ichimokuTenkan || 9;
-                document.getElementById('ichimokuKijun').value = data.ichimokuKijun || 26;
-                document.getElementById('ichimokuSenkouB').value = data.ichimokuSenkouB || 52;
-            }
-            
-            if (data.vwapEnabled === 'true') {
-                document.getElementById('vwapPeriod').value = data.vwapPeriod || 14;
-                document.getElementById('vwapDeviation').value = data.vwapDeviation || 2;
-                document.getElementById('vwapEmaFast').value = data.vwapEmaFast || 8;
-                document.getElementById('vwapEmaSlow').value = data.vwapEmaSlow || 21;
-            }
-        });
-
-    // 保存交易所选择
-    document.getElementById('exchangeForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        const exchange = formData.get('exchange');
-        
-        if (!exchange) {
-            alert('请选择一个交易所');
-            return;
-        }
-        
-        fetch('/api/settings/exchange', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
             if (data.success) {
-                alert('交易所选择已保存');
-                // 刷新页面以更新状态
-                window.location.reload();
-            } else {
-                alert('保存失败：' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('保存失败，请检查网络连接');
-        });
-    });
-
-    // 保存基础设置
-    document.getElementById('basicForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        fetch('/api/settings/basic', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('基础设置已保存');
-            } else {
-                alert('保存失败：' + data.error);
-            }
-        });
-    });
-
-    // 保存策略选择
-    document.getElementById('strategyForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        fetch('/api/settings/strategy', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('策略选择已保存');
-            } else {
-                alert('保存失败：' + data.error);
-            }
-        });
-    });
-
-    // 保存各个策略的参数
-    ['rsiForm', 'bbForm', 'ichimokuForm', 'vwapForm'].forEach(formId => {
-        document.getElementById(formId).addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            fetch('/api/settings/strategy-params', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('策略参数已保存');
-                } else {
-                    alert('保存失败：' + data.error);
+                // 设置交易所选择
+                if (data.current_exchange === 'binance') {
+                    document.getElementById('binance').checked = true;
+                } else if (data.current_exchange === 'lbank') {
+                    document.getElementById('lbank').checked = true;
                 }
-            });
+
+                // 设置策略选择
+                document.getElementById('scalpingEnabled').checked = data.scalpingEnabled === 'true';
+                document.getElementById('supertrendEnabled').checked = data.supertrendEnabled === 'true';
+                document.getElementById('rsiEnabled').checked = data.rsiEnabled === 'true';
+                document.getElementById('bbEnabled').checked = data.bbEnabled === 'true';
+
+                // 设置基础参数
+                document.getElementById('tradingPair').value = data.tradingPair || 'BTCUSDT';
+                document.getElementById('leverage').value = data.leverage || '10';
+                document.getElementById('quantity').value = data.quantity || '0.001';
+                document.getElementById('stopLoss').value = data.stopLoss || '0.3';
+                document.getElementById('takeProfit').value = data.takeProfit || '0.6';
+                document.getElementById('maxDailyTrades').value = data.maxDailyTrades || '100';
+            }
         });
+});
+
+// 保存交易所选择
+document.getElementById('exchangeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = {
+        current_exchange: document.querySelector('input[name="exchange"]:checked').value
+    };
+
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('交易所选择已保存');
+        } else {
+            alert('保存失败: ' + data.error);
+        }
+    });
+});
+
+// 保存策略选择
+document.getElementById('strategyForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = {
+        scalpingEnabled: document.getElementById('scalpingEnabled').checked,
+        supertrendEnabled: document.getElementById('supertrendEnabled').checked,
+        rsiEnabled: document.getElementById('rsiEnabled').checked,
+        bbEnabled: document.getElementById('bbEnabled').checked
+    };
+
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('策略选择已保存');
+        } else {
+            alert('保存失败: ' + data.error);
+        }
+    });
+});
+
+// 保存基础设置
+document.getElementById('basicSettingsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = {
+        tradingPair: document.getElementById('tradingPair').value,
+        leverage: document.getElementById('leverage').value,
+        quantity: document.getElementById('quantity').value,
+        stopLoss: document.getElementById('stopLoss').value,
+        takeProfit: document.getElementById('takeProfit').value,
+        maxDailyTrades: document.getElementById('maxDailyTrades').value
+    };
+
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('基础设置已保存');
+        } else {
+            alert('保存失败: ' + data.error);
+        }
     });
 });
 </script>

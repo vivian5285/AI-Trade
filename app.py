@@ -550,60 +550,78 @@ def chart_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# API路由：获取单个API密钥
+# API密钥管理路由
 @app.route('/api/keys/<int:key_id>', methods=['GET'])
 def get_api_key(key_id):
     try:
         key = APIKey.query.get_or_404(key_id)
         return jsonify({
-            'id': key.id,
+            'success': True,
             'exchange': key.exchange,
             'api_key': key.api_key,
             'api_secret': key.api_secret
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
-# API路由：更新API密钥
 @app.route('/api/keys/<int:key_id>', methods=['PUT'])
 def update_api_key(key_id):
     try:
         key = APIKey.query.get_or_404(key_id)
         data = request.get_json()
         
-        # 验证API密钥
-        if not validate_api_key(key.exchange, data['api_key'], data['api_secret']):
-            return jsonify({'error': '无效的API凭证'}), 400
-            
+        key.exchange = data['exchange']
         key.api_key = data['api_key']
         key.api_secret = data['api_secret']
-        db.session.commit()
         
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# API路由：删除API密钥
-@app.route('/api/keys/<int:key_id>', methods=['DELETE'])
-def delete_api_key(key_id):
-    try:
-        key = APIKey.query.get_or_404(key_id)
-        db.session.delete(key)
         db.session.commit()
-        return jsonify({'success': True})
+        return jsonify({
+            'success': True,
+            'message': 'API密钥已更新'
+        })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
-# API路由：切换API密钥状态
 @app.route('/api/keys/<int:key_id>/toggle', methods=['POST'])
 def toggle_api_key(key_id):
     try:
         key = APIKey.query.get_or_404(key_id)
         key.is_active = not key.is_active
         db.session.commit()
-        return jsonify({'success': True})
+        return jsonify({
+            'success': True,
+            'message': 'API密钥状态已更新'
+        })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/keys/<int:key_id>', methods=['DELETE'])
+def delete_api_key(key_id):
+    try:
+        key = APIKey.query.get_or_404(key_id)
+        db.session.delete(key)
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'API密钥已删除'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
