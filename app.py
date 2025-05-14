@@ -16,7 +16,7 @@ import logging
 import subprocess
 import signal
 from functools import lru_cache, wraps
-from trading_bot_manager import TradingBotManager
+from trading_bot_manager import trading_bot_manager
 
 # 加载环境变量
 load_dotenv()
@@ -1738,7 +1738,7 @@ def validate_bot_data(data):
     return True
 
 # 初始化机器人管理器
-bot_manager = TradingBotManager()
+bot_manager = trading_bot_manager()
 
 @app.route('/api/bot/start/<int:bot_id>', methods=['POST'])
 @handle_errors
