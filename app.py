@@ -274,7 +274,7 @@ def trade_history():
 
 # 添加获取单个交易详情的路由
 @app.route('/trade_history/<int:trade_id>')
-def get_trade_details(trade_id):
+def view_trade_details(trade_id):
     try:
         trade = TradeHistory.query.get_or_404(trade_id)
         return jsonify({
