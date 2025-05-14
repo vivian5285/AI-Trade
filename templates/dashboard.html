@@ -3,73 +3,56 @@
 {% block title %}仪表盘 - AI Trading System{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <h2 class="mb-4">交易仪表盘</h2>
-    
-    <!-- API密钥状态 -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">MT4</h5>
-                    {% if api_keys and api_keys|selectattr('exchange', 'equalto', 'MT4')|list %}
-                        <span class="badge bg-success">已连接</span>
-                    {% else %}
-                        <span class="badge bg-danger">未连接</span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Binance</h5>
-                    {% if api_keys and api_keys|selectattr('exchange', 'equalto', 'Binance')|list %}
-                        <span class="badge bg-success">已连接</span>
-                    {% else %}
-                        <span class="badge bg-danger">未连接</span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">LBank</h5>
-                    {% if api_keys and api_keys|selectattr('exchange', 'equalto', 'LBank')|list %}
-                        <span class="badge bg-success">已连接</span>
-                    {% else %}
-                        <span class="badge bg-danger">未连接</span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 交易机器人控制 -->
-    <div class="row mb-4">
-        <div class="col-md-12">
+<div class="container mt-4">
+    <div class="row">
+        <!-- 市场概览卡片 -->
+        <div class="col-md-6 mb-4">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">交易机器人控制</h5>
+                    <h5 class="mb-0">市场概览</h5>
                 </div>
                 <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-6">
-                            <div class="d-flex align-items-center">
-                                <div class="me-3">
-                                    <div class="status-indicator" id="botStatusIndicator"></div>
-                                </div>
-                                <div>
-                                    <h6 class="mb-0">交易机器人状态</h6>
-                                    <p class="text-muted mb-0" id="botStatusText">正在检查...</p>
-                                </div>
-                            </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <h6>BTC/USDT</h6>
+                            <p id="btc-price">加载中...</p>
+                            <p id="btc-change" class="text-muted">24h变化: 加载中...</p>
                         </div>
-                        <div class="col-md-6 text-end">
-                            <button class="btn btn-success me-2" onclick="startTradingBot()">启动</button>
-                            <button class="btn btn-danger me-2" onclick="stopTradingBot()">停止</button>
-                            <button class="btn btn-warning" onclick="restartTradingBot()">重启</button>
+                        <div class="col-6">
+                            <h6>ETH/USDT</h6>
+                            <p id="eth-price">加载中...</p>
+                            <p id="eth-change" class="text-muted">24h变化: 加载中...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 账户概览卡片 -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">账户概览</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <h6>总余额</h6>
+                            <p id="total-balance">加载中...</p>
+                        </div>
+                        <div class="col-6">
+                            <h6>今日盈亏</h6>
+                            <p id="daily-pnl">加载中...</p>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-6">
+                            <h6>持仓数量</h6>
+                            <p id="open-positions">加载中...</p>
+                        </div>
+                        <div class="col-6">
+                            <h6>持仓价值</h6>
+                            <p id="total-position">加载中...</p>
                         </div>
                     </div>
                 </div>
@@ -77,50 +60,66 @@
         </div>
     </div>
 
-    <!-- 最近交易 -->
+    <!-- 交易机器人控制面板 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">交易机器人控制</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <div class="status-indicator me-2" id="bot-status-indicator"></div>
+                                <span id="bot-status-text">状态: 检查中...</span>
+                            </div>
+                        </div>
+                        <div class="col-md-9">
+                            <button class="btn btn-success me-2" id="start-bot">启动</button>
+                            <button class="btn btn-danger me-2" id="stop-bot">停止</button>
+                            <button class="btn btn-warning" id="restart-bot">重启</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 交易历史卡片 -->
     <div class="row">
         <div class="col-md-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">最近交易</h5>
+                    <h5 class="mb-0">最近交易</h5>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>时间</th>
                                     <th>交易所</th>
                                     <th>交易对</th>
                                     <th>方向</th>
                                     <th>价格</th>
                                     <th>数量</th>
+                                    <th>时间</th>
                                     <th>状态</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for trade in trades %}
                                 <tr>
-                                    <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                     <td>{{ trade.exchange }}</td>
                                     <td>{{ trade.symbol }}</td>
-                                    <td>
-                                        {% if trade.side == 'BUY' %}
-                                            <span class="text-success">买入</span>
-                                        {% else %}
-                                            <span class="text-danger">卖出</span>
-                                        {% endif %}
-                                    </td>
+                                    <td>{{ trade.side }}</td>
                                     <td>{{ trade.price }}</td>
                                     <td>{{ trade.quantity }}</td>
+                                    <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                     <td>
-                                        {% if trade.status == 'OPEN' %}
-                                            <span class="badge bg-warning">开仓</span>
-                                        {% elif trade.status == 'CLOSED' %}
-                                            <span class="badge bg-success">平仓</span>
-                                        {% else %}
-                                            <span class="badge bg-danger">取消</span>
-                                        {% endif %}
+                                        <span class="badge {% if trade.status == 'CLOSED' %}bg-success{% elif trade.status == 'OPEN' %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ trade.status }}
+                                        </span>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -136,92 +135,115 @@
 
 {% block scripts %}
 <script>
+// 更新市场数据
+function updateMarketData() {
+    fetch('/api/market-data')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('btc-price').textContent = data.btc.price;
+            document.getElementById('btc-change').textContent = `24h变化: ${data.btc.change}%`;
+            document.getElementById('eth-price').textContent = data.eth.price;
+            document.getElementById('eth-change').textContent = `24h变化: ${data.eth.change}%`;
+        });
+}
+
+// 更新账户数据
+function updateAccountData() {
+    fetch('/api/account-data')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('total-balance').textContent = data.balance;
+            document.getElementById('daily-pnl').textContent = data.daily_pnl;
+            document.getElementById('open-positions').textContent = data.open_positions;
+            document.getElementById('total-position').textContent = data.total_position;
+        });
+}
+
 // 更新交易机器人状态
 function updateBotStatus() {
     fetch('/api/trading-bot/status')
         .then(response => response.json())
         .then(data => {
-            const indicator = document.getElementById('botStatusIndicator');
-            const statusText = document.getElementById('botStatusText');
+            const indicator = document.getElementById('bot-status-indicator');
+            const statusText = document.getElementById('bot-status-text');
+            const startBtn = document.getElementById('start-bot');
+            const stopBtn = document.getElementById('stop-bot');
             
             if (data.is_running) {
                 indicator.style.backgroundColor = '#28a745';
-                statusText.textContent = '运行中';
+                statusText.textContent = '状态: 运行中';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
             } else {
                 indicator.style.backgroundColor = '#dc3545';
-                statusText.textContent = '已停止';
+                statusText.textContent = '状态: 已停止';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            document.getElementById('botStatusText').textContent = '状态检查失败';
         });
 }
 
 // 启动交易机器人
-function startTradingBot() {
-    fetch('/api/trading-bot/start', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('交易机器人已启动');
-            updateBotStatus();
-        } else {
-            alert('启动失败: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('启动失败');
-    });
-}
+document.getElementById('start-bot').addEventListener('click', function() {
+    fetch('/api/trading-bot/start', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateBotStatus();
+            } else {
+                alert('启动失败: ' + data.error);
+            }
+        });
+});
 
 // 停止交易机器人
-function stopTradingBot() {
-    fetch('/api/trading-bot/stop', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('交易机器人已停止');
-            updateBotStatus();
-        } else {
-            alert('停止失败: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('停止失败');
-    });
-}
+document.getElementById('stop-bot').addEventListener('click', function() {
+    fetch('/api/trading-bot/stop', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateBotStatus();
+            } else {
+                alert('停止失败: ' + data.error);
+            }
+        });
+});
 
 // 重启交易机器人
-function restartTradingBot() {
-    fetch('/api/trading-bot/restart', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('交易机器人已重启');
-            updateBotStatus();
-        } else {
-            alert('重启失败: ' + data.error);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('重启失败');
-    });
-}
+document.getElementById('restart-bot').addEventListener('click', function() {
+    fetch('/api/trading-bot/restart', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateBotStatus();
+            } else {
+                alert('重启失败: ' + data.error);
+            }
+        });
+});
 
-// 定期更新状态
-setInterval(updateBotStatus, 5000);
-updateBotStatus();
+// 初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 设置状态指示器样式
+    const indicator = document.getElementById('bot-status-indicator');
+    indicator.style.width = '12px';
+    indicator.style.height = '12px';
+    indicator.style.borderRadius = '50%';
+    indicator.style.display = 'inline-block';
+    indicator.style.backgroundColor = '#dc3545';
+    
+    // 初始更新数据
+    updateMarketData();
+    updateAccountData();
+    updateBotStatus();
+    
+    // 定期更新数据
+    setInterval(updateMarketData, 10000);
+    setInterval(updateAccountData, 30000);
+    setInterval(updateBotStatus, 5000);
+});
 </script>
+{% endblock %}
 
 <style>
 .status-indicator {
@@ -234,4 +256,4 @@ updateBotStatus();
 .status-indicator.active {
     background-color: #28a745;
 }
-{% endblock %} 
+</style> 

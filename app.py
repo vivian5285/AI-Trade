@@ -126,18 +126,20 @@ def dashboard():
 def api_keys():
     try:
         if request.method == 'POST':
-            exchange = request.form.get('exchange')
-            api_key = request.form.get('api_key')
-            api_secret = request.form.get('api_secret')
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': '无效的请求数据'}), 400
+                
+            exchange = data.get('exchange')
+            api_key = data.get('api_key')
+            api_secret = data.get('api_secret')
             
             if not all([exchange, api_key, api_secret]):
-                flash('请填写所有必填字段')
-                return redirect(url_for('api_keys'))
+                return jsonify({'success': False, 'error': '请填写所有必填字段'}), 400
             
             # 验证API密钥
             if not validate_api_key(exchange, api_key, api_secret):
-                flash('无效的API凭证')
-                return redirect(url_for('api_keys'))
+                return jsonify({'success': False, 'error': '无效的API凭证'}), 400
                 
             new_key = APIKey(
                 exchange=exchange,
@@ -146,13 +148,13 @@ def api_keys():
             )
             db.session.add(new_key)
             db.session.commit()
-            flash('API密钥添加成功')
+            return jsonify({'success': True, 'message': 'API密钥添加成功'})
             
         api_keys = APIKey.query.all()
         return render_template('api_keys.html', api_keys=api_keys)
     except Exception as e:
         logger.error(f"Error in api_keys route: {str(e)}")
-        return render_template('error.html', error=str(e)), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # 路由：交易历史
 @app.route('/trades')
@@ -510,6 +512,7 @@ def get_api_key(key_id):
             'api_secret': key.api_secret
         })
     except Exception as e:
+        logger.error(f"Error getting API key: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -521,6 +524,13 @@ def update_api_key(key_id):
         key = APIKey.query.get_or_404(key_id)
         data = request.get_json()
         
+        if not data:
+            return jsonify({'success': False, 'error': '无效的请求数据'}), 400
+            
+        # 验证API密钥
+        if not validate_api_key(data['exchange'], data['api_key'], data['api_secret']):
+            return jsonify({'success': False, 'error': '无效的API凭证'}), 400
+        
         key.exchange = data['exchange']
         key.api_key = data['api_key']
         key.api_secret = data['api_secret']
@@ -531,6 +541,7 @@ def update_api_key(key_id):
             'message': 'API密钥已更新'
         })
     except Exception as e:
+        logger.error(f"Error updating API key: {str(e)}")
         db.session.rollback()
         return jsonify({
             'success': False,
@@ -548,6 +559,7 @@ def toggle_api_key(key_id):
             'message': 'API密钥状态已更新'
         })
     except Exception as e:
+        logger.error(f"Error toggling API key: {str(e)}")
         db.session.rollback()
         return jsonify({
             'success': False,
@@ -565,6 +577,7 @@ def delete_api_key(key_id):
             'message': 'API密钥已删除'
         })
     except Exception as e:
+        logger.error(f"Error deleting API key: {str(e)}")
         db.session.rollback()
         return jsonify({
             'success': False,
