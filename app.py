@@ -12,6 +12,7 @@ import requests
 import hmac
 import hashlib
 import time
+import logging
 
 # 加载环境变量
 load_dotenv()
@@ -214,8 +215,13 @@ def save_notification_settings():
 def save_exchange_settings():
     try:
         exchange = request.form.get('exchange')
+        logger.info(f"Received exchange selection: {exchange}")  # 添加日志
+        
+        if not exchange:
+            return jsonify({'success': False, 'error': '未选择交易所'})
+            
         if exchange not in ['binance', 'lbank']:
-            return jsonify({'success': False, 'error': '无效的交易所选择'})
+            return jsonify({'success': False, 'error': f'无效的交易所选择: {exchange}'})
             
         # 更新.env文件
         env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -240,8 +246,10 @@ def save_exchange_settings():
         # 更新环境变量
         os.environ['CURRENT_EXCHANGE'] = exchange
         
+        logger.info(f"Successfully saved exchange selection: {exchange}")  # 添加日志
         return jsonify({'success': True})
     except Exception as e:
+        logger.error(f"Error saving exchange settings: {str(e)}")  # 添加错误日志
         return jsonify({'success': False, 'error': str(e)})
 
 def update_env_file(updates):

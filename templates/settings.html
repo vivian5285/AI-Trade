@@ -18,7 +18,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="radio" name="exchange" id="binance" value="binance">
+                                    <input class="form-check-input" type="radio" name="exchange" id="binance" value="binance" {% if current_exchange == 'binance' %}checked{% endif %}>
                                     <label class="form-check-label" for="binance">
                                         Binance
                                         <small class="text-muted d-block">API Key: {{ binance_api_key[:8] }}...{{ binance_api_key[-4:] }}</small>
@@ -27,7 +27,7 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="radio" name="exchange" id="lbank" value="lbank">
+                                    <input class="form-check-input" type="radio" name="exchange" id="lbank" value="lbank" {% if current_exchange == 'lbank' %}checked{% endif %}>
                                     <label class="form-check-label" for="lbank">
                                         LBank
                                         <small class="text-muted d-block">API Key: {{ lbank_api_key[:8] }}...{{ lbank_api_key[-4:] }}</small>
@@ -314,6 +314,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('exchangeForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const formData = new FormData(this);
+        const exchange = formData.get('exchange');
+        
+        if (!exchange) {
+            alert('请选择一个交易所');
+            return;
+        }
+        
         fetch('/api/settings/exchange', {
             method: 'POST',
             body: formData
@@ -322,9 +329,15 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 alert('交易所选择已保存');
+                // 刷新页面以更新状态
+                window.location.reload();
             } else {
                 alert('保存失败：' + data.error);
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('保存失败，请检查网络连接');
         });
     });
 
