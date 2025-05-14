@@ -3,7 +3,7 @@
 {% block title %}仪表盘 - AI Trading System{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-5">
     <div class="row">
         <!-- 市场概览卡片 -->
         <div class="col-md-6 mb-4">
@@ -195,10 +195,30 @@ function updateKlineChart() {
         .catch(error => console.error('Error updating kline chart:', error));
 }
 
+// 添加加载状态管理
+function setLoading(elementId, isLoading) {
+    const element = document.getElementById(elementId);
+    if (isLoading) {
+        element.textContent = '加载中...';
+        element.classList.add('text-muted');
+    }
+}
+
 // 更新市场数据
 function updateMarketData() {
+    // 设置加载状态
+    setLoading('btc-price', true);
+    setLoading('btc-change', true);
+    setLoading('eth-price', true);
+    setLoading('eth-change', true);
+
     fetch('/api/market-data')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.error) {
                 console.error('Error fetching market data:', data.error);
@@ -206,27 +226,44 @@ function updateMarketData() {
             }
             
             // 更新BTC数据
-            document.getElementById('btc-price').textContent = `$${data.btc.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById('btc-change').textContent = `${data.btc.change_24h.toFixed(2)}%`;
-            document.getElementById('btc-change').className = data.btc.change_24h >= 0 ? 'text-success' : 'text-danger';
+            const btcPrice = document.getElementById('btc-price');
+            const btcChange = document.getElementById('btc-change');
+            btcPrice.textContent = `$${data.btc.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            btcChange.textContent = `24h变化: ${data.btc.change_24h.toFixed(2)}%`;
+            btcChange.className = data.btc.change_24h >= 0 ? 'text-success' : 'text-danger';
             
             // 更新ETH数据
-            document.getElementById('eth-price').textContent = `$${data.eth.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById('eth-change').textContent = `${data.eth.change_24h.toFixed(2)}%`;
-            document.getElementById('eth-change').className = data.eth.change_24h >= 0 ? 'text-success' : 'text-danger';
-            
-            // 更新K线数据
-            if (data.btc.klines && data.eth.klines) {
-                updateChart(data.btc.klines);
-            }
+            const ethPrice = document.getElementById('eth-price');
+            const ethChange = document.getElementById('eth-change');
+            ethPrice.textContent = `$${data.eth.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            ethChange.textContent = `24h变化: ${data.eth.change_24h.toFixed(2)}%`;
+            ethChange.className = data.eth.change_24h >= 0 ? 'text-success' : 'text-danger';
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error fetching market data:', error);
+            // 显示错误状态
+            document.getElementById('btc-price').textContent = '加载失败';
+            document.getElementById('btc-change').textContent = '加载失败';
+            document.getElementById('eth-price').textContent = '加载失败';
+            document.getElementById('eth-change').textContent = '加载失败';
+        });
 }
 
 // 更新账户数据
 function updateAccountData() {
+    // 设置加载状态
+    setLoading('total-balance', true);
+    setLoading('daily-pnl', true);
+    setLoading('open-positions', true);
+    setLoading('total-position', true);
+
     fetch('/api/account-data')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.error) {
                 console.error('Error fetching account data:', data.error);
@@ -234,42 +271,65 @@ function updateAccountData() {
             }
             
             // 更新总余额
-            document.getElementById('total-balance').textContent = `$${data.total_balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const totalBalance = document.getElementById('total-balance');
+            totalBalance.textContent = `$${data.total_balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             
             // 更新今日盈亏
-            document.getElementById('daily-pnl').textContent = `$${data.daily_pnl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            document.getElementById('daily-pnl').className = data.daily_pnl >= 0 ? 'text-success' : 'text-danger';
+            const dailyPnl = document.getElementById('daily-pnl');
+            dailyPnl.textContent = `$${data.daily_pnl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            dailyPnl.className = data.daily_pnl >= 0 ? 'text-success' : 'text-danger';
             
             // 更新持仓数量
-            document.getElementById('open-positions').textContent = data.positions.length;
+            const openPositions = document.getElementById('open-positions');
+            openPositions.textContent = data.positions.length;
             
             // 更新持仓价值
+            const totalPosition = document.getElementById('total-position');
             const totalPositionValue = data.positions.reduce((sum, pos) => sum + pos.value, 0);
-            document.getElementById('total-position').textContent = `$${totalPositionValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            totalPosition.textContent = `$${totalPositionValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             
             // 更新持仓表格
-            const positionsTable = document.getElementById('positionsTable');
-            positionsTable.innerHTML = '';
-            
-            data.positions.forEach(position => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${position.exchange}</td>
-                    <td>${position.asset}</td>
-                    <td>${position.free.toFixed(8)}</td>
-                    <td>${position.locked.toFixed(8)}</td>
-                    <td>$${position.price.toFixed(2)}</td>
-                    <td>$${position.value.toFixed(2)}</td>
-                    <td>${position.leverage ? position.leverage + 'x' : '-'}</td>
-                    <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
-                        ${position.unrealized_pnl ? '$' + position.unrealized_pnl.toFixed(2) : '-'}
-                    </td>
-                    <td>${position.liquidation_price ? '$' + position.liquidation_price.toFixed(2) : '-'}</td>
-                `;
-                positionsTable.appendChild(row);
-            });
+            updatePositionsTable(data.positions);
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error fetching account data:', error);
+            // 显示错误状态
+            document.getElementById('total-balance').textContent = '加载失败';
+            document.getElementById('daily-pnl').textContent = '加载失败';
+            document.getElementById('open-positions').textContent = '加载失败';
+            document.getElementById('total-position').textContent = '加载失败';
+        });
+}
+
+// 更新持仓表格
+function updatePositionsTable(positions) {
+    const positionsTable = document.getElementById('positionsTable');
+    positionsTable.innerHTML = '';
+    
+    if (positions.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="9" class="text-center">暂无持仓</td>';
+        positionsTable.appendChild(row);
+        return;
+    }
+    
+    positions.forEach(position => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${position.exchange}</td>
+            <td>${position.asset}</td>
+            <td>${position.free.toFixed(8)}</td>
+            <td>${position.locked.toFixed(8)}</td>
+            <td>$${position.price.toFixed(2)}</td>
+            <td>$${position.value.toFixed(2)}</td>
+            <td>${position.leverage ? position.leverage + 'x' : '-'}</td>
+            <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
+                ${position.unrealized_pnl ? '$' + position.unrealized_pnl.toFixed(2) : '-'}
+            </td>
+            <td>${position.liquidation_price ? '$' + position.liquidation_price.toFixed(2) : '-'}</td>
+        `;
+        positionsTable.appendChild(row);
+    });
 }
 
 // 在页面加载时初始化
