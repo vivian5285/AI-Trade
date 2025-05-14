@@ -57,13 +57,24 @@ with app.app_context():
     
     # 检查是否需要添加默认API密钥
     if not APIKey.query.first():
-        default_key = APIKey(
-            exchange='LBank',
+        # 添加Binance默认密钥
+        binance_key = APIKey(
+            exchange='Binance',
             api_key=os.getenv('BINANCE_API_KEY'),
             api_secret=os.getenv('BINANCE_API_SECRET'),
             is_active=True
         )
-        db.session.add(default_key)
+        db.session.add(binance_key)
+        
+        # 添加LBank默认密钥
+        lbank_key = APIKey(
+            exchange='LBank',
+            api_key=os.getenv('LBANK_API_KEY'),
+            api_secret=os.getenv('LBANK_API_SECRET'),
+            is_active=True
+        )
+        db.session.add(lbank_key)
+        
         db.session.commit()
 
 # 路由：首页/仪表盘
@@ -287,18 +298,25 @@ def update_env_file(updates):
 # API密钥验证函数
 def validate_api_key(exchange, api_key, api_secret):
     try:
-        timestamp = str(int(time.time() * 1000))
-        params = {
-            'api_key': api_key,
-            'timestamp': timestamp
-        }
-        sign = generate_lbank_sign(params, api_secret)
-        params['sign'] = sign
-        
-        response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-        data = response.json()
-        
-        return data.get('result', False)
+        if exchange.lower() == 'binance':
+            client = Client(api_key, api_secret)
+            # 测试API连接
+            client.get_account()
+            return True
+        elif exchange.lower() == 'lbank':
+            timestamp = str(int(time.time() * 1000))
+            params = {
+                'api_key': api_key,
+                'timestamp': timestamp
+            }
+            sign = generate_lbank_sign(params, api_secret)
+            params['sign'] = sign
+            
+            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
+            data = response.json()
+            
+            return data.get('result', False)
+        return False
     except Exception as e:
         print(f"API验证错误: {str(e)}")
         return False
