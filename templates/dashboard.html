@@ -46,6 +46,37 @@
         </div>
     </div>
 
+    <!-- 交易机器人控制 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">交易机器人控制</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <div class="status-indicator" id="botStatusIndicator"></div>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0">交易机器人状态</h6>
+                                    <p class="text-muted mb-0" id="botStatusText">正在检查...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <button class="btn btn-success me-2" onclick="startTradingBot()">启动</button>
+                            <button class="btn btn-danger me-2" onclick="stopTradingBot()">停止</button>
+                            <button class="btn btn-warning" onclick="restartTradingBot()">重启</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 最近交易 -->
     <div class="row">
         <div class="col-md-12">
@@ -101,4 +132,106 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 更新交易机器人状态
+function updateBotStatus() {
+    fetch('/api/trading-bot/status')
+        .then(response => response.json())
+        .then(data => {
+            const indicator = document.getElementById('botStatusIndicator');
+            const statusText = document.getElementById('botStatusText');
+            
+            if (data.is_running) {
+                indicator.style.backgroundColor = '#28a745';
+                statusText.textContent = '运行中';
+            } else {
+                indicator.style.backgroundColor = '#dc3545';
+                statusText.textContent = '已停止';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('botStatusText').textContent = '状态检查失败';
+        });
+}
+
+// 启动交易机器人
+function startTradingBot() {
+    fetch('/api/trading-bot/start', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('交易机器人已启动');
+            updateBotStatus();
+        } else {
+            alert('启动失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('启动失败');
+    });
+}
+
+// 停止交易机器人
+function stopTradingBot() {
+    fetch('/api/trading-bot/stop', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('交易机器人已停止');
+            updateBotStatus();
+        } else {
+            alert('停止失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('停止失败');
+    });
+}
+
+// 重启交易机器人
+function restartTradingBot() {
+    fetch('/api/trading-bot/restart', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('交易机器人已重启');
+            updateBotStatus();
+        } else {
+            alert('重启失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('重启失败');
+    });
+}
+
+// 定期更新状态
+setInterval(updateBotStatus, 5000);
+updateBotStatus();
+</script>
+
+<style>
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    display: inline-block;
+}
+.status-indicator.active {
+    background-color: #28a745;
+}
 {% endblock %} 

@@ -39,6 +39,7 @@
                 <a href="{{ url_for('api_keys') }}"><i class="fas fa-key"></i> API密钥</a>
                 <a href="{{ url_for('trades') }}"><i class="fas fa-history"></i> 交易历史</a>
                 <a href="{{ url_for('settings') }}"><i class="fas fa-cog"></i> 系统设置</a>
+                <a href="#" id="tradingBotControl"><i class="fas fa-robot"></i> 交易机器人</a>
             </div>
             <div class="col-md-10 main-content">
                 {% with messages = get_flashed_messages(with_categories=true) %}
