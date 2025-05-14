@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mt4_trader:
+    build: .
+    container_name: mt4_trader
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    networks:
+      - trading_network
+
+  binance_trader:
+    build: .
+    container_name: binance_trader
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    environment:
+      - TZ=Asia/Shanghai
+    command: python examples/run_binance_strategy.py
+    restart: unless-stopped
+    networks:
+      - trading_network
+
+  lbank_trader:
+    build: .
+    container_name: lbank_trader
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    environment:
+      - TZ=Asia/Shanghai
+    command: python examples/run_lbank_strategy.py
+    restart: unless-stopped
+    networks:
+      - trading_network
+
+networks:
+  trading_network:
+    driver: bridge 

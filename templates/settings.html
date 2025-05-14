@@ -1,101 +1,158 @@
 {% extends "base.html" %}
 
+{% block title %}设置 - AI Trading System{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-4">Trading Settings</h2>
-    
-    <div class="card">
-        <div class="card-header">
-            <h4>API Configuration</h4>
+    <h2 class="mb-4">系统设置</h2>
+
+    <!-- 交易设置 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">交易设置</h5>
+                </div>
+                <div class="card-body">
+                    <form id="tradingSettingsForm" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="trading_pair" class="form-label">交易对</label>
+                            <input type="text" class="form-control" id="trading_pair" name="trading_pair" value="{{ settings.trading_pair }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="leverage" class="form-label">杠杆倍数</label>
+                            <input type="number" class="form-control" id="leverage" name="leverage" value="{{ settings.leverage }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="quantity" class="form-label">交易数量</label>
+                            <input type="number" class="form-control" id="quantity" name="quantity" value="{{ settings.quantity }}" step="0.001">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="stop_loss" class="form-label">止损比例 (%)</label>
+                            <input type="number" class="form-control" id="stop_loss" name="stop_loss" value="{{ settings.stop_loss }}" step="0.1">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="take_profit" class="form-label">止盈比例 (%)</label>
+                            <input type="number" class="form-control" id="take_profit" name="take_profit" value="{{ settings.take_profit }}" step="0.1">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">保存设置</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <form method="POST">
-                <!-- Binance API -->
-                <h5 class="mt-4">Binance API</h5>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="binance_api_key" class="form-label">API Key</label>
-                            <input type="text" class="form-control" id="binance_api_key" name="binance_api_key" 
-                                   value="{{ config.binance_api_key }}">
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="binance_api_secret" class="form-label">API Secret</label>
-                            <input type="password" class="form-control" id="binance_api_secret" name="binance_api_secret" 
-                                   value="{{ config.binance_api_secret }}">
-                        </div>
-                    </div>
+    </div>
+
+    <!-- 风险控制设置 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">风险控制设置</h5>
                 </div>
-                
-                <!-- LBank API -->
-                <h5 class="mt-4">LBank API</h5>
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="lbank_api_key" class="form-label">API Key</label>
-                            <input type="text" class="form-control" id="lbank_api_key" name="lbank_api_key" 
-                                   value="{{ config.lbank_api_key }}">
+                <div class="card-body">
+                    <form id="riskSettingsForm" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="max_daily_trades" class="form-label">每日最大交易次数</label>
+                            <input type="number" class="form-control" id="max_daily_trades" name="max_daily_trades" value="{{ settings.max_daily_trades }}">
                         </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="lbank_api_secret" class="form-label">API Secret</label>
-                            <input type="password" class="form-control" id="lbank_api_secret" name="lbank_api_secret" 
-                                   value="{{ config.lbank_api_secret }}">
+                        <div class="col-md-4">
+                            <label for="max_daily_loss" class="form-label">每日最大亏损比例 (%)</label>
+                            <input type="number" class="form-control" id="max_daily_loss" name="max_daily_loss" value="{{ settings.max_daily_loss }}" step="0.1">
                         </div>
-                    </div>
+                        <div class="col-md-4">
+                            <label for="min_volume" class="form-label">最小交易量</label>
+                            <input type="number" class="form-control" id="min_volume" name="min_volume" value="{{ settings.min_volume }}">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">保存设置</button>
+                        </div>
+                    </form>
                 </div>
-                
-                <!-- Trading Settings -->
-                <h5 class="mt-4">Trading Parameters</h5>
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="trading_pair" class="form-label">Trading Pair</label>
-                            <input type="text" class="form-control" id="trading_pair" name="trading_pair" 
-                                   value="{{ trading_settings.trading_pair }}">
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="leverage" class="form-label">Leverage</label>
-                            <input type="number" class="form-control" id="leverage" name="leverage" 
-                                   value="{{ trading_settings.leverage }}">
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="quantity" class="form-label">Quantity</label>
-                            <input type="number" step="0.001" class="form-control" id="quantity" name="quantity" 
-                                   value="{{ trading_settings.quantity }}">
-                        </div>
-                    </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知设置 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">通知设置</h5>
                 </div>
-                
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="stop_loss" class="form-label">Stop Loss (%)</label>
-                            <input type="number" step="0.1" class="form-control" id="stop_loss" name="stop_loss" 
-                                   value="{{ trading_settings.stop_loss }}">
+                <div class="card-body">
+                    <form id="notificationSettingsForm" class="row g-3">
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">通知邮箱</label>
+                            <input type="email" class="form-control" id="email" name="email" value="{{ settings.notification_email }}">
                         </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="take_profit" class="form-label">Take Profit (%)</label>
-                            <input type="number" step="0.1" class="form-control" id="take_profit" name="take_profit" 
-                                   value="{{ trading_settings.take_profit }}">
+                        <div class="col-md-6">
+                            <label for="telegram" class="form-label">Telegram Bot Token</label>
+                            <input type="text" class="form-control" id="telegram" name="telegram" value="{{ settings.telegram_bot_token }}">
                         </div>
-                    </div>
+                        <div class="col-md-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="email_notifications" name="email_notifications" {% if settings.email_notifications %}checked{% endif %}>
+                                <label class="form-check-label" for="email_notifications">
+                                    启用邮件通知
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="telegram_notifications" name="telegram_notifications" {% if settings.telegram_notifications %}checked{% endif %}>
+                                <label class="form-check-label" for="telegram_notifications">
+                                    启用Telegram通知
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">保存设置</button>
+                        </div>
+                    </form>
                 </div>
-                
-                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                    <button type="submit" class="btn btn-primary">Save Settings</button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 交易设置表单提交
+document.getElementById('tradingSettingsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    saveSettings('trading', formData);
+});
+
+// 风险控制设置表单提交
+document.getElementById('riskSettingsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    saveSettings('risk', formData);
+});
+
+// 通知设置表单提交
+document.getElementById('notificationSettingsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    saveSettings('notification', formData);
+});
+
+// 保存设置
+function saveSettings(type, formData) {
+    fetch(`/settings/${type}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('设置保存成功');
+        } else {
+            alert('设置保存失败：' + data.message);
+        }
+    });
+}
+</script>
 {% endblock %} 

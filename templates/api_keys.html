@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}API密钥管理 - AI Trading System{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">添加API密钥</h5>
+                    <form method="POST" action="{{ url_for('api_keys') }}" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="exchange" class="form-label">交易所</label>
+                            <select class="form-select" id="exchange" name="exchange" required>
+                                <option value="">选择交易所</option>
+                                <option value="Binance">Binance</option>
+                                <option value="LBank">LBank</option>
+                                <option value="MT4">MT4</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="api_key" class="form-label">API Key</label>
+                            <input type="text" class="form-control" id="api_key" name="api_key" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="api_secret" class="form-label">API Secret</label>
+                            <input type="password" class="form-control" id="api_secret" name="api_secret" required>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="submit" class="btn btn-primary w-100">添加</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">已配置的API密钥</h5>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>交易所</th>
+                                    <th>API Key</th>
+                                    <th>创建时间</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for key in api_keys %}
+                                <tr>
+                                    <td>{{ key.exchange }}</td>
+                                    <td>
+                                        <span class="api-key-mask">{{ key.api_key[:8] }}...{{ key.api_key[-4:] }}</span>
+                                        <button class="btn btn-sm btn-link show-key" data-key="{{ key.api_key }}">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </td>
+                                    <td>{{ key.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input toggle-status" type="checkbox" 
+                                                   data-id="{{ key.id }}" 
+                                                   {% if key.is_active %}checked{% endif %}>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary edit-key" data-id="{{ key.id }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger delete-key" data-id="{{ key.id }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑API密钥模态框 -->
+<div class="modal fade" id="editKeyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑API密钥</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editKeyForm">
+                    <input type="hidden" id="edit_key_id" name="id">
+                    <div class="mb-3">
+                        <label for="edit_api_key" class="form-label">API Key</label>
+                        <input type="text" class="form-control" id="edit_api_key" name="api_key" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_api_secret" class="form-label">API Secret</label>
+                        <input type="password" class="form-control" id="edit_api_secret" name="api_secret" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveEditKey">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 显示/隐藏API密钥
+document.querySelectorAll('.show-key').forEach(button => {
+    button.addEventListener('click', function() {
+        const key = this.dataset.key;
+        const mask = this.previousElementSibling;
+        if (mask.textContent.includes('...')) {
+            mask.textContent = key;
+            this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+        } else {
+            mask.textContent = `${key.slice(0, 8)}...${key.slice(-4)}`;
+            this.innerHTML = '<i class="fas fa-eye"></i>';
+        }
+    });
+});
+
+// 切换API密钥状态
+document.querySelectorAll('.toggle-status').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const keyId = this.dataset.id;
+        fetch(`/api/keys/${keyId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('操作失败：' + data.error);
+                this.checked = !this.checked;
+            }
+        });
+    });
+});
+
+// 编辑API密钥
+document.querySelectorAll('.edit-key').forEach(button => {
+    button.addEventListener('click', function() {
+        const keyId = this.dataset.id;
+        fetch(`/api/keys/${keyId}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('edit_key_id').value = data.id;
+                document.getElementById('edit_api_key').value = data.api_key;
+                document.getElementById('edit_api_secret').value = data.api_secret;
+                new bootstrap.Modal(document.getElementById('editKeyModal')).show();
+            });
+    });
+});
+
+// 保存编辑的API密钥
+document.getElementById('saveEditKey').addEventListener('click', function() {
+    const form = document.getElementById('editKeyForm');
+    const keyId = document.getElementById('edit_key_id').value;
+    
+    fetch(`/api/keys/${keyId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            api_key: document.getElementById('edit_api_key').value,
+            api_secret: document.getElementById('edit_api_secret').value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('保存失败：' + data.error);
+        }
+    });
+});
+
+// 删除API密钥
+document.querySelectorAll('.delete-key').forEach(button => {
+    button.addEventListener('click', function() {
+        if (confirm('确定要删除这个API密钥吗？')) {
+            const keyId = this.dataset.id;
+            fetch(`/api/keys/${keyId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('删除失败：' + data.error);
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %} 

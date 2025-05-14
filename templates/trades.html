@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}交易历史 - AI Trading System{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">交易历史</h2>
+
+    <!-- 筛选器 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <form id="filterForm" class="row g-3">
+                        <div class="col-md-2">
+                            <label for="exchange" class="form-label">交易所</label>
+                            <select class="form-select" id="exchange" name="exchange">
+                                <option value="">全部</option>
+                                <option value="MT4">MT4</option>
+                                <option value="Binance">Binance</option>
+                                <option value="LBank">LBank</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="symbol" class="form-label">交易对</label>
+                            <input type="text" class="form-control" id="symbol" name="symbol" placeholder="例如：BTCUSDT">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="side" class="form-label">方向</label>
+                            <select class="form-select" id="side" name="side">
+                                <option value="">全部</option>
+                                <option value="BUY">买入</option>
+                                <option value="SELL">卖出</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="status" class="form-label">状态</label>
+                            <select class="form-select" id="status" name="status">
+                                <option value="">全部</option>
+                                <option value="OPEN">开仓</option>
+                                <option value="CLOSED">平仓</option>
+                                <option value="CANCELLED">取消</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="start_date" class="form-label">开始日期</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="end_date" class="form-label">结束日期</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary">筛选</button>
+                            <button type="reset" class="btn btn-secondary">重置</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 交易列表 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>交易所</th>
+                                    <th>交易对</th>
+                                    <th>方向</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for trade in trades %}
+                                <tr>
+                                    <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>{{ trade.exchange }}</td>
+                                    <td>{{ trade.symbol }}</td>
+                                    <td>
+                                        {% if trade.side == 'BUY' %}
+                                            <span class="text-success">买入</span>
+                                        {% else %}
+                                            <span class="text-danger">卖出</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ trade.price }}</td>
+                                    <td>{{ trade.quantity }}</td>
+                                    <td>
+                                        {% if trade.status == 'OPEN' %}
+                                            <span class="badge bg-warning">开仓</span>
+                                        {% elif trade.status == 'CLOSED' %}
+                                            <span class="badge bg-success">平仓</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">取消</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info" onclick="showTradeDetails({{ trade.id }})">
+                                            详情
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 交易详情模态框 -->
+<div class="modal fade" id="tradeDetailsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">交易详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="tradeDetails"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 筛选表单提交
+document.getElementById('filterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const params = new URLSearchParams(formData);
+    window.location.href = `/trades?${params.toString()}`;
+});
+
+// 显示交易详情
+function showTradeDetails(tradeId) {
+    fetch(`/trades/${tradeId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const trade = data.trade;
+                const details = `
+                    <dl class="row">
+                        <dt class="col-sm-4">交易ID</dt>
+                        <dd class="col-sm-8">${trade.id}</dd>
+                        
+                        <dt class="col-sm-4">交易所</dt>
+                        <dd class="col-sm-8">${trade.exchange}</dd>
+                        
+                        <dt class="col-sm-4">交易对</dt>
+                        <dd class="col-sm-8">${trade.symbol}</dd>
+                        
+                        <dt class="col-sm-4">方向</dt>
+                        <dd class="col-sm-8">${trade.side === 'BUY' ? '买入' : '卖出'}</dd>
+                        
+                        <dt class="col-sm-4">价格</dt>
+                        <dd class="col-sm-8">${trade.price}</dd>
+                        
+                        <dt class="col-sm-4">数量</dt>
+                        <dd class="col-sm-8">${trade.quantity}</dd>
+                        
+                        <dt class="col-sm-4">状态</dt>
+                        <dd class="col-sm-8">
+                            ${trade.status === 'OPEN' ? '开仓' : 
+                              trade.status === 'CLOSED' ? '平仓' : '取消'}
+                        </dd>
+                        
+                        <dt class="col-sm-4">时间</dt>
+                        <dd class="col-sm-8">${new Date(trade.timestamp).toLocaleString()}</dd>
+                    </dl>
+                `;
+                document.getElementById('tradeDetails').innerHTML = details;
+                new bootstrap.Modal(document.getElementById('tradeDetailsModal')).show();
+            } else {
+                alert('获取交易详情失败：' + data.message);
+            }
+        });
+}
+</script>
+{% endblock %} 
