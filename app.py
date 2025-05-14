@@ -21,6 +21,11 @@ from trading_bot_manager import trading_bot_manager
 # 加载环境变量
 load_dotenv()
 
+# 确保必要的目录存在
+for directory in ['/root/AI-Trade/instance', '/root/AI-Trade/logs']:
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -92,22 +97,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # 初始化数据库
 db = SQLAlchemy(app)
 
-# 在创建应用实例后，确保数据库目录存在
-if not os.path.exists('/root/AI-Trade/instance'):
-    os.makedirs('/root/AI-Trade/instance')
-
-# 确保日志目录存在
-if not os.path.exists('/root/AI-Trade/logs'):
-    os.makedirs('/root/AI-Trade/logs')
-
-# 确保数据库文件路径正确
-db_path = '/root/AI-Trade/instance/trade.db'
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-
-# 创建所有数据库表
-with app.app_context():
-    db.create_all()
-
 # API密钥模型
 class APIKey(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -159,70 +148,45 @@ class TradingBotLog(db.Model):
     details = db.Column(db.Text)  # 详细信息
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# 重新创建所有表
-with app.app_context():
-    db.drop_all()
-    db.create_all()
-
-# 确保实例文件夹存在
-try:
-    os.makedirs(app.instance_path)
-except OSError:
-    pass
-
-# 配置日志记录
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
 # 创建数据库表
-try:
-    with app.app_context():
-        db.create_all()
+with app.app_context():
+    db.create_all()
+    
+    # 检查是否需要添加默认API密钥
+    if not APIKey.query.first():
+        # 获取环境变量
+        binance_api_key = os.getenv('BINANCE_API_KEY')
+        binance_api_secret = os.getenv('BINANCE_API_SECRET')
+        lbank_api_key = os.getenv('LBANK_API_KEY')
+        lbank_api_secret = os.getenv('LBANK_API_SECRET')
         
-        # 检查是否需要添加默认API密钥
-        if not APIKey.query.first():
-            # 获取环境变量
-            binance_api_key = os.getenv('BINANCE_API_KEY')
-            binance_api_secret = os.getenv('BINANCE_API_SECRET')
-            lbank_api_key = os.getenv('LBANK_API_KEY')
-            lbank_api_secret = os.getenv('LBANK_API_SECRET')
-            
-            if not all([binance_api_key, binance_api_secret, lbank_api_key, lbank_api_secret]):
-                logger.warning("Some API keys are missing in .env file")
-            
-            # 添加Binance默认密钥
-            binance_key = APIKey(
-                exchange='Binance',
-                api_key=binance_api_key or '',
-                api_secret=binance_api_secret or '',
-                is_active=True
-            )
-            db.session.add(binance_key)
-            
-            # 添加LBank默认密钥
-            lbank_key = APIKey(
-                exchange='LBank',
-                api_key=lbank_api_key or '',
-                api_secret=lbank_api_secret or '',
-                is_active=True
-            )
-            db.session.add(lbank_key)
-            
-            try:
-                db.session.commit()
-                logger.info("Successfully initialized database with API keys")
-            except Exception as e:
-                logger.error(f"Error initializing database: {str(e)}")
-                db.session.rollback()
-except Exception as e:
-    logger.error(f"Error during database initialization: {str(e)}")
+        if not all([binance_api_key, binance_api_secret, lbank_api_key, lbank_api_secret]):
+            logger.warning("Some API keys are missing in .env file")
+        
+        # 添加Binance默认密钥
+        binance_key = APIKey(
+            exchange='Binance',
+            api_key=binance_api_key or '',
+            api_secret=binance_api_secret or '',
+            is_active=True
+        )
+        db.session.add(binance_key)
+        
+        # 添加LBank默认密钥
+        lbank_key = APIKey(
+            exchange='LBank',
+            api_key=lbank_api_key or '',
+            api_secret=lbank_api_secret or '',
+            is_active=True
+        )
+        db.session.add(lbank_key)
+        
+        try:
+            db.session.commit()
+            logger.info("Successfully initialized database with API keys")
+        except Exception as e:
+            logger.error(f"Error initializing database: {str(e)}")
+            db.session.rollback()
 
 # 添加全局变量来跟踪交易机器人进程
 trading_bot_process = None
