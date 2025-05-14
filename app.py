@@ -1502,28 +1502,23 @@ def execute_high_frequency_trade_api():
 @log_request
 def get_trading_bots():
     try:
-        db = get_db()
-        bots = db.execute('''
-            SELECT id, name, exchange, trading_pair, status, strategies, funds,
-                   leverage, stop_loss, take_profit, max_daily_trades, performance
-            FROM trading_bots
-        ''').fetchall()
+        bots = TradingBotConfig.query.all()
         
         return api_response(
             data={
                 'bots': [{
-                    'id': bot['id'],
-                    'name': bot['name'],
-                    'exchange': bot['exchange'],
-                    'trading_pair': bot['trading_pair'],
-                    'status': bot['status'],
-                    'strategies': json.loads(bot['strategies']),
-                    'funds': bot['funds'],
-                    'leverage': bot['leverage'],
-                    'stop_loss': bot['stop_loss'],
-                    'take_profit': bot['take_profit'],
-                    'max_daily_trades': bot['max_daily_trades'],
-                    'performance': json.loads(bot['performance']) if bot['performance'] else None
+                    'id': bot.id,
+                    'name': bot.name,
+                    'exchange': bot.exchange,
+                    'trading_pair': bot.trading_pair,
+                    'status': bot.status,
+                    'strategies': json.loads(bot.strategies),
+                    'funds': bot.funds,
+                    'leverage': bot.leverage,
+                    'stop_loss': bot.stop_loss,
+                    'take_profit': bot.take_profit,
+                    'max_daily_trades': bot.max_daily_trades,
+                    'performance': json.loads(bot.performance) if bot.performance else None
                 } for bot in bots]
             }
         )
