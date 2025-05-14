@@ -1887,5 +1887,4 @@ def update_high_frequency_settings():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    # 确保监听所有地址，并设置正确的端口
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True) 
+    app.run(host='0.0.0.0', port=5000, debug=False) 
