@@ -140,4 +140,73 @@ updateBotStatus();
 .status-indicator.active {
     background-color: #28a745;
 }
-</style> 
+</style>
+
+<!-- 最近交易 -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">最近交易</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>交易所</th>
+                                <th>交易对</th>
+                                <th>方向</th>
+                                <th>价格</th>
+                                <th>数量</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 交易机器人控制 -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">交易机器人控制</h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <div class="status-indicator" id="botStatusIndicator"></div>
+                            </div>
+                            <div>
+                                <h6 class="mb-0">交易机器人状态</h6>
+                                <p class="text-muted mb-0" id="botStatusText">正在检查...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-success me-2" id="startBot" disabled>
+                            <i class="fas fa-play"></i> 启动
+                        </button>
+                        <button class="btn btn-danger me-2" id="stopBot" disabled>
+                            <i class="fas fa-stop"></i> 停止
+                        </button>
+                        <button class="btn btn-warning" id="restartBot" disabled>
+                            <i class="fas fa-sync"></i> 重启
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div> 
