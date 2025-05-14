@@ -60,8 +60,8 @@ with app.app_context():
         # 添加Binance默认密钥
         binance_key = APIKey(
             exchange='Binance',
-            api_key=os.getenv('BINANCE_API_KEY'),
-            api_secret=os.getenv('BINANCE_API_SECRET'),
+            api_key=os.getenv('BINANCE_API_KEY', ''),
+            api_secret=os.getenv('BINANCE_API_SECRET', ''),
             is_active=True
         )
         db.session.add(binance_key)
@@ -69,13 +69,17 @@ with app.app_context():
         # 添加LBank默认密钥
         lbank_key = APIKey(
             exchange='LBank',
-            api_key=os.getenv('LBANK_API_KEY'),
-            api_secret=os.getenv('LBANK_API_SECRET'),
+            api_key=os.getenv('LBANK_API_KEY', ''),
+            api_secret=os.getenv('LBANK_API_SECRET', ''),
             is_active=True
         )
         db.session.add(lbank_key)
         
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            print(f"Error initializing database: {str(e)}")
+            db.session.rollback()
 
 # 路由：首页/仪表盘
 @app.route('/')
