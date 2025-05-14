@@ -163,182 +163,100 @@ def trades():
 # 路由：设置
 @app.route('/settings')
 def settings():
-    # 从.env文件加载设置
-    settings = load_config()
-    
-    # 获取API密钥（只显示部分）
-    binance_api_key = os.getenv('BINANCE_API_KEY', '')
-    lbank_api_key = os.getenv('LBANK_API_KEY', '')
-    
-    # 获取当前选择的交易所
-    current_exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
-    
-    return render_template('settings.html', 
-                         settings=settings,
-                         binance_api_key=binance_api_key,
-                         lbank_api_key=lbank_api_key,
-                         current_exchange=current_exchange)
-
-# 路由：保存基础设置
-@app.route('/settings/basic', methods=['POST'])
-def save_basic_settings():
     try:
-        # 更新环境变量
-        os.environ['TRADING_PAIR'] = request.form.get('trading_pair')
-        os.environ['LEVERAGE'] = request.form.get('leverage')
-        os.environ['QUANTITY'] = request.form.get('quantity')
+        # 获取当前设置
+        current_settings = {
+            'current_exchange': os.getenv('CURRENT_EXCHANGE', 'binance'),
+            'scalpingEnabled': os.getenv('SCALPING_ENABLED', 'false'),
+            'supertrendEnabled': os.getenv('SUPERTREND_ENABLED', 'false'),
+            'rsiEnabled': os.getenv('RSI_ENABLED', 'false'),
+            'bbEnabled': os.getenv('BB_ENABLED', 'false'),
+            'tradingPair': os.getenv('TRADING_PAIR', 'BTCUSDT'),
+            'leverage': os.getenv('LEVERAGE', '10'),
+            'quantity': os.getenv('QUANTITY', '0.001'),
+            'stopLoss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
+            'takeProfit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6'),
+            'maxDailyTrades': os.getenv('MAX_DAILY_TRADES', '100')
+        }
         
-        # 更新.env文件
-        update_env_file({
-            'TRADING_PAIR': request.form.get('trading_pair'),
-            'LEVERAGE': request.form.get('leverage'),
-            'QUANTITY': request.form.get('quantity')
-        })
+        # 获取API密钥信息
+        binance_key = APIKey.query.filter_by(exchange='Binance').first()
+        lbank_key = APIKey.query.filter_by(exchange='LBank').first()
         
-        return jsonify({'success': True})
+        binance_api_key = binance_key.api_key if binance_key else ''
+        lbank_api_key = lbank_key.api_key if lbank_key else ''
+        
+        return render_template('settings.html', 
+                             settings=current_settings,
+                             binance_api_key=binance_api_key,
+                             lbank_api_key=lbank_api_key)
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        logger.error(f"Error in settings route: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
 
-# 路由：保存策略设置
-@app.route('/settings/strategy', methods=['POST'])
-def save_strategy_settings():
+@app.route('/api/settings', methods=['GET', 'POST'])
+def handle_settings():
     try:
-        # 更新环境变量
-        os.environ['TREND_EMA_FAST'] = request.form.get('trend_ema_fast')
-        os.environ['TREND_EMA_SLOW'] = request.form.get('trend_ema_slow')
-        os.environ['GRID_SIZE'] = request.form.get('grid_size')
-        os.environ['GRID_SPACING'] = request.form.get('grid_spacing')
-        os.environ['SCALPING_PROFIT_TARGET'] = request.form.get('scalping_profit_target')
-        os.environ['SCALPING_STOP_LOSS'] = request.form.get('scalping_stop_loss')
-        
-        # 更新.env文件
-        update_env_file({
-            'TREND_EMA_FAST': request.form.get('trend_ema_fast'),
-            'TREND_EMA_SLOW': request.form.get('trend_ema_slow'),
-            'GRID_SIZE': request.form.get('grid_size'),
-            'GRID_SPACING': request.form.get('grid_spacing'),
-            'SCALPING_PROFIT_TARGET': request.form.get('scalping_profit_target'),
-            'SCALPING_STOP_LOSS': request.form.get('scalping_stop_loss')
-        })
-        
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-# 路由：保存风险控制设置
-@app.route('/settings/risk', methods=['POST'])
-def save_risk_settings():
-    try:
-        # 更新环境变量
-        os.environ['MAX_DAILY_TRADES'] = request.form.get('max_daily_trades')
-        os.environ['MAX_DAILY_LOSS_PERCENTAGE'] = request.form.get('max_daily_loss')
-        os.environ['MIN_VOLUME_THRESHOLD'] = request.form.get('min_volume')
-        
-        # 更新.env文件
-        update_env_file({
-            'MAX_DAILY_TRADES': request.form.get('max_daily_trades'),
-            'MAX_DAILY_LOSS_PERCENTAGE': request.form.get('max_daily_loss'),
-            'MIN_VOLUME_THRESHOLD': request.form.get('min_volume')
-        })
-        
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-# 路由：保存通知设置
-@app.route('/settings/notification', methods=['POST'])
-def save_notification_settings():
-    try:
-        # 更新环境变量
-        os.environ['NOTIFICATION_EMAIL'] = request.form.get('email')
-        os.environ['TELEGRAM_BOT_TOKEN'] = request.form.get('telegram')
-        os.environ['EMAIL_NOTIFICATIONS'] = 'true' if request.form.get('email_notifications') else 'false'
-        os.environ['TELEGRAM_NOTIFICATIONS'] = 'true' if request.form.get('telegram_notifications') else 'false'
-        
-        # 更新.env文件
-        update_env_file({
-            'NOTIFICATION_EMAIL': request.form.get('email'),
-            'TELEGRAM_BOT_TOKEN': request.form.get('telegram'),
-            'EMAIL_NOTIFICATIONS': 'true' if request.form.get('email_notifications') else 'false',
-            'TELEGRAM_NOTIFICATIONS': 'true' if request.form.get('telegram_notifications') else 'false'
-        })
-        
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
-
-@app.route('/api/settings/exchange', methods=['POST'])
-def save_exchange_settings():
-    try:
-        exchange = request.form.get('exchange')
-        logger.info(f"Received exchange selection: {exchange}")  # 添加日志
-        
-        if not exchange:
-            return jsonify({'success': False, 'error': '未选择交易所'})
+        if request.method == 'GET':
+            # 获取当前设置
+            current_settings = {
+                'current_exchange': os.getenv('CURRENT_EXCHANGE', 'binance'),
+                'scalpingEnabled': os.getenv('SCALPING_ENABLED', 'false'),
+                'supertrendEnabled': os.getenv('SUPERTREND_ENABLED', 'false'),
+                'rsiEnabled': os.getenv('RSI_ENABLED', 'false'),
+                'bbEnabled': os.getenv('BB_ENABLED', 'false'),
+                'tradingPair': os.getenv('TRADING_PAIR', 'BTCUSDT'),
+                'leverage': os.getenv('LEVERAGE', '10'),
+                'quantity': os.getenv('QUANTITY', '0.001'),
+                'stopLoss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
+                'takeProfit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6'),
+                'maxDailyTrades': os.getenv('MAX_DAILY_TRADES', '100')
+            }
+            return jsonify({'success': True, **current_settings})
             
-        if exchange not in ['binance', 'lbank']:
-            return jsonify({'success': False, 'error': f'无效的交易所选择: {exchange}'})
+        elif request.method == 'POST':
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'error': '无效的请求数据'}), 400
+                
+            # 更新环境变量
+            env_file = '.env'
+            env_vars = {}
             
-        # 更新.env文件
-        env_path = os.path.join(os.path.dirname(__file__), '.env')
-        env_vars = {}
-        
-        # 读取现有的.env文件
-        if os.path.exists(env_path):
-            with open(env_path, 'r') as f:
-                for line in f:
-                    if '=' in line:
-                        key, value = line.strip().split('=', 1)
-                        env_vars[key] = value
-        
-        # 更新交易所选择
-        env_vars['CURRENT_EXCHANGE'] = exchange
-        
-        # 写入.env文件
-        with open(env_path, 'w') as f:
-            for key, value in env_vars.items():
-                f.write(f'{key}={value}\n')
-        
-        # 更新环境变量
-        os.environ['CURRENT_EXCHANGE'] = exchange
-        
-        logger.info(f"Successfully saved exchange selection: {exchange}")  # 添加日志
-        return jsonify({'success': True})
+            # 读取现有的环境变量
+            if os.path.exists(env_file):
+                with open(env_file, 'r') as f:
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            env_vars[key] = value
+            
+            # 更新环境变量
+            for key, value in data.items():
+                if key in ['current_exchange', 'scalpingEnabled', 'supertrendEnabled', 
+                          'rsiEnabled', 'bbEnabled', 'tradingPair', 'leverage', 
+                          'quantity', 'stopLoss', 'takeProfit', 'maxDailyTrades']:
+                    env_vars[key.upper()] = str(value)
+            
+            # 写入环境变量文件
+            with open(env_file, 'w') as f:
+                for key, value in env_vars.items():
+                    f.write(f"{key}={value}\n")
+            
+            # 重新加载环境变量
+            load_dotenv(override=True)
+            
+            return jsonify({
+                'success': True,
+                'message': '设置已更新'
+            })
+            
     except Exception as e:
-        logger.error(f"Error saving exchange settings: {str(e)}")  # 添加错误日志
-        return jsonify({'success': False, 'error': str(e)})
-
-def update_env_file(updates):
-    """更新.env文件"""
-    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
-    
-    # 读取现有的.env文件
-    if os.path.exists(env_path):
-        with open(env_path, 'r') as f:
-            lines = f.readlines()
-    else:
-        lines = []
-    
-    # 更新或添加新的环境变量
-    new_lines = []
-    updated_keys = set()
-    
-    for line in lines:
-        key = line.split('=')[0].strip()
-        if key in updates:
-            new_lines.append(f"{key}={updates[key]}\n")
-            updated_keys.add(key)
-        else:
-            new_lines.append(line)
-    
-    # 添加新的环境变量
-    for key, value in updates.items():
-        if key not in updated_keys:
-            new_lines.append(f"{key}={value}\n")
-    
-    # 写入.env文件
-    with open(env_path, 'w') as f:
-        f.writelines(new_lines)
+        logger.error(f"Error in handle_settings: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # API密钥验证函数
 def validate_api_key(exchange, api_key, api_secret):

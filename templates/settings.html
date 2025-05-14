@@ -18,7 +18,7 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="radio" name="exchange" id="binance" value="binance" {% if current_exchange == 'binance' %}checked{% endif %}>
+                                    <input class="form-check-input" type="radio" name="exchange" id="binance" value="binance" {% if settings.current_exchange == 'binance' %}checked{% endif %}>
                                     <label class="form-check-label" for="binance">
                                         Binance
                                         <small class="text-muted d-block">API Key: {{ binance_api_key[:8] }}...{{ binance_api_key[-4:] }}</small>
@@ -27,7 +27,7 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="radio" name="exchange" id="lbank" value="lbank" {% if current_exchange == 'lbank' %}checked{% endif %}>
+                                    <input class="form-check-input" type="radio" name="exchange" id="lbank" value="lbank" {% if settings.current_exchange == 'lbank' %}checked{% endif %}>
                                     <label class="form-check-label" for="lbank">
                                         LBank
                                         <small class="text-muted d-block">API Key: {{ lbank_api_key[:8] }}...{{ lbank_api_key[-4:] }}</small>
@@ -55,26 +55,26 @@
                             <!-- 基础策略 -->
                             <div class="col-md-3">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="scalpingEnabled" name="scalpingEnabled">
+                                    <input class="form-check-input" type="checkbox" id="scalpingEnabled" name="scalpingEnabled" {% if settings.scalpingEnabled == 'true' %}checked{% endif %}>
                                     <label class="form-check-label" for="scalpingEnabled">剥头皮策略</label>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="supertrendEnabled" name="supertrendEnabled">
+                                    <input class="form-check-input" type="checkbox" id="supertrendEnabled" name="supertrendEnabled" {% if settings.supertrendEnabled == 'true' %}checked{% endif %}>
                                     <label class="form-check-label" for="supertrendEnabled">超级趋势过滤器</label>
                                 </div>
                             </div>
                             <!-- 新增策略 -->
                             <div class="col-md-3">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="rsiEnabled" name="rsiEnabled">
+                                    <input class="form-check-input" type="checkbox" id="rsiEnabled" name="rsiEnabled" {% if settings.rsiEnabled == 'true' %}checked{% endif %}>
                                     <label class="form-check-label" for="rsiEnabled">RSI + MACD + EMA</label>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="bbEnabled" name="bbEnabled">
+                                    <input class="form-check-input" type="checkbox" id="bbEnabled" name="bbEnabled" {% if settings.bbEnabled == 'true' %}checked{% endif %}>
                                     <label class="form-check-label" for="bbEnabled">布林带 + 成交量</label>
                                 </div>
                             </div>
@@ -99,19 +99,19 @@
                             <div class="col-md-4">
                                 <div class="form-group mb-3">
                                     <label for="tradingPair">交易对</label>
-                                    <input type="text" class="form-control" id="tradingPair" name="tradingPair" value="{{ env.get('TRADING_PAIR', 'BTCUSDT') }}">
+                                    <input type="text" class="form-control" id="tradingPair" name="tradingPair" value="{{ settings.tradingPair }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group mb-3">
                                     <label for="leverage">杠杆倍数</label>
-                                    <input type="number" class="form-control" id="leverage" name="leverage" value="{{ env.get('LEVERAGE', '10') }}">
+                                    <input type="number" class="form-control" id="leverage" name="leverage" value="{{ settings.leverage }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group mb-3">
                                     <label for="quantity">每次下单数量</label>
-                                    <input type="number" step="0.0001" class="form-control" id="quantity" name="quantity" value="{{ env.get('QUANTITY', '0.001') }}">
+                                    <input type="number" step="0.0001" class="form-control" id="quantity" name="quantity" value="{{ settings.quantity }}">
                                 </div>
                             </div>
                         </div>
@@ -119,19 +119,19 @@
                             <div class="col-md-4">
                                 <div class="form-group mb-3">
                                     <label for="stopLoss">止损百分比 (%)</label>
-                                    <input type="number" step="0.01" class="form-control" id="stopLoss" name="stopLoss" value="{{ env.get('STOP_LOSS_PERCENTAGE', '0.3') }}">
+                                    <input type="number" step="0.01" class="form-control" id="stopLoss" name="stopLoss" value="{{ settings.stopLoss }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group mb-3">
                                     <label for="takeProfit">止盈百分比 (%)</label>
-                                    <input type="number" step="0.01" class="form-control" id="takeProfit" name="takeProfit" value="{{ env.get('TAKE_PROFIT_PERCENTAGE', '0.6') }}">
+                                    <input type="number" step="0.01" class="form-control" id="takeProfit" name="takeProfit" value="{{ settings.takeProfit }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group mb-3">
                                     <label for="maxDailyTrades">每日最大交易次数</label>
-                                    <input type="number" class="form-control" id="maxDailyTrades" name="maxDailyTrades" value="{{ env.get('MAX_DAILY_TRADES', '100') }}">
+                                    <input type="number" class="form-control" id="maxDailyTrades" name="maxDailyTrades" value="{{ settings.maxDailyTrades }}">
                                 </div>
                             </div>
                         </div>
