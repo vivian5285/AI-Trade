@@ -1,104 +1,154 @@
-# AI Trade 量化交易系统
+# AI Trading Bot
 
-## 项目简介
-AI Trade 是一个基于 Flask 的多交易所量化交易系统，支持币安（Binance）、LBank 等主流交易所，集成了多种交易策略（如RSI、布林带、SuperTrend、网格、Ichimoku等），并提供了可视化的仪表盘和交易机器人控制面板。
+一个基于Python的自动化交易机器人系统，支持多个交易所和多种交易策略。
 
-## 主要功能
-- 实时市场行情与K线图展示
-- 账户资产与持仓信息总览
-- 交易机器人控制（启动/停止/重启）
-- 策略参数可视化配置与保存
-- 交易历史与运行日志查询
-- 多交易所API密钥管理
-- 支持多种主流量化策略
+## 功能特点
 
-## 技术栈
+- 支持多个交易所（Binance、LBank）
+- 多种交易策略（网格交易、超级趋势、RSI、布林带等）
+- 实时市场数据监控
+- 自动交易执行
+- 风险管理系统
+- Web控制面板
+- 交易历史记录
+- 性能分析报告
+
+## 系统要求
+
 - Python 3.8+
-- Flask & Flask-SQLAlchemy
-- Bootstrap 5 & Bootstrap Icons
-- JavaScript (Fetch API)
-- Lightweight Charts (K线图)
-- python-binance, requests, python-dotenv, pandas, plotly
+- MySQL/PostgreSQL
+- Nginx
+- Supervisor
 
-## 安装与部署
-### 1. 克隆项目
+## 安装步骤
+
+1. 克隆代码库：
 ```bash
-git clone <your-repo-url>
-cd AI-Trade
+git clone https://github.com/your-repo/trading-bot.git
+cd trading-bot
 ```
 
-### 2. 安装依赖
+2. 安装依赖：
 ```bash
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-### 3. 配置环境变量
-编辑 `.env` 文件，填写如下内容（请用你自己的API Key/Secret替换）：
-```ini
-SECRET_KEY=your_secret_key
-CURRENT_EXCHANGE=Binance
-BINANCE_API_KEY=xxx
-BINANCE_API_SECRET=xxx
-LBANK_API_KEY=xxx
-LBANK_API_SECRET=xxx
-# 其他策略参数...
-```
+3. 配置环境变量：
+- 复制 `.env.example` 到 `.env`
+- 填写必要的配置信息（API密钥等）
 
-### 4. 初始化数据库
+4. 初始化数据库：
 ```bash
-python3 init_db.py
+flask db upgrade
 ```
 
-### 5. 启动服务
-开发环境：
+5. 启动服务：
 ```bash
-python3 app.py
+./deploy.sh
 ```
-生产环境（推荐使用 systemd）：
+
+## 配置说明
+
+### 环境变量
+
+- `SECRET_KEY`: Flask应用密钥
+- `BINANCE_API_KEY`: Binance API密钥
+- `BINANCE_API_SECRET`: Binance API密钥
+- `LBANK_API_KEY`: LBank API密钥
+- `LBANK_API_SECRET`: LBank API密钥
+- `CURRENT_EXCHANGE`: 当前使用的交易所
+- `TRADING_PAIR`: 交易对
+- `LEVERAGE`: 杠杆倍数
+- `QUANTITY`: 交易数量
+- `STOP_LOSS_PERCENTAGE`: 止损百分比
+- `TAKE_PROFIT_PERCENTAGE`: 止盈百分比
+- `MAX_DAILY_TRADES`: 每日最大交易次数
+
+### 策略配置
+
+在 `config.json` 中配置各个策略的参数：
+
+```json
+{
+  "rsi": {
+    "period": 14,
+    "overbought": 70,
+    "oversold": 30
+  },
+  "bollinger_bands": {
+    "period": 20,
+    "std_dev": 2
+  },
+  "supertrend": {
+    "atr_period": 10,
+    "atr_multiplier": 3
+  }
+}
+```
+
+## 使用说明
+
+1. 访问控制面板：
+- 打开浏览器访问 `http://your-domain.com`
+- 默认用户名：admin
+- 默认密码：admin123
+
+2. 配置交易机器人：
+- 选择交易所和交易对
+- 设置交易参数
+- 选择交易策略
+- 设置风险参数
+
+3. 启动交易：
+- 点击"启动"按钮开始交易
+- 监控交易状态和性能
+- 查看交易历史和报告
+
+## 安全建议
+
+1. 修改默认密码
+2. 使用强密码
+3. 定期更新API密钥
+4. 启用双因素认证
+5. 限制API权限
+6. 定期备份数据
+
+## 故障排除
+
+1. 检查日志文件：
 ```bash
-sudo systemctl restart ai-trade
-sudo systemctl status ai-trade
+tail -f /var/log/trading_bot/err.log
 ```
 
-### 6. 访问系统
-浏览器访问：http://your-server-ip:5000
-
-## 目录结构
-```
-AI-Trade/
-├── app.py                # 主后端服务
-├── init_db.py            # 数据库初始化脚本
-├── requirements.txt      # 依赖包列表
-├── .env                  # 环境变量配置
-├── templates/            # 前端页面模板
-│   ├── base.html         # 基础布局
-│   ├── dashboard.html    # 仪表盘
-│   ├── trading_bot.html  # 交易机器人控制
-│   └── ...
-├── static/               # 静态资源
-│   └── ...
-└── app.log               # 日志文件
+2. 检查服务状态：
+```bash
+sudo supervisorctl status trading_bot
 ```
 
-## 环境变量说明
-- `SECRET_KEY`：Flask应用密钥
-- `CURRENT_EXCHANGE`：当前交易所（Binance/LBank）
-- `BINANCE_API_KEY`/`BINANCE_API_SECRET`：币安API密钥
-- `LBANK_API_KEY`/`LBANK_API_SECRET`：LBank API密钥
-- 其他策略参数（如RSI、布林带、SuperTrend等）可在`.env`中配置
+3. 重启服务：
+```bash
+sudo supervisorctl restart trading_bot
+```
 
-## 常见问题
-- **API密钥无效/未生效**：请确保`.env`和数据库中的密钥一致，重启服务后生效。
-- **页面数据一直显示"加载中..."**：请检查API密钥配置、网络连通性和日志文件（`app.log`）。
-- **数据库初始化报错**：请确认已正确安装依赖，并使用`python3`运行`init_db.py`。
-- **服务无法启动**：检查`app.log`和`systemctl status ai-trade`输出，排查端口占用、依赖缺失等问题。
+## 维护说明
 
-## 贡献与反馈
-如需贡献代码或反馈问题，请提交 Issue 或 Pull Request。
+1. 定期更新：
+```bash
+git pull
+pip install -r requirements.txt
+sudo supervisorctl restart trading_bot
+```
 
-## 联系方式
-- 作者：AI Trade 团队
-- 邮箱：your@email.com
+2. 数据库备份：
+```bash
+pg_dump -U your_user your_database > backup.sql
+```
 
----
-如有更多问题，欢迎联系开发者或查阅源码注释。 
+3. 日志轮转：
+```bash
+sudo logrotate -f /etc/logrotate.d/trading_bot
+```
+
+## 许可证
+
+MIT License 

@@ -1,0 +1,79 @@
+{
+    "strategy_name": "trend_following",
+    "description": "趋势跟踪策略，结合移动平均线、RSI、MACD和布林带",
+    "parameters": {
+        "min_signal_interval": 300,
+        "base_position_size": 0.1,
+        "max_position_size": 0.3,
+        "max_additional_position": 0.2,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.04,
+        "risk_reward_ratio": 2.0,
+        "max_daily_trades": 10,
+        "max_daily_loss": 0.05,
+        "max_drawdown": 0.15,
+        "indicators": {
+            "ma_periods": [20, 50, 200],
+            "rsi_period": 14,
+            "rsi_overbought": 70,
+            "rsi_oversold": 30,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "bb_period": 20,
+            "bb_std": 2
+        }
+    },
+    "trading_pairs": [
+        {
+            "symbol": "BTCUSDT",
+            "min_volume": 1000000,
+            "min_price_change": 0.001,
+            "leverage": 20
+        },
+        {
+            "symbol": "ETHUSDT",
+            "min_volume": 500000,
+            "min_price_change": 0.002,
+            "leverage": 20
+        }
+    ],
+    "risk_management": {
+        "max_open_positions": 3,
+        "position_sizing": {
+            "method": "kelly",
+            "max_risk_per_trade": 0.02,
+            "max_risk_per_day": 0.05
+        },
+        "stop_loss": {
+            "type": "trailing",
+            "activation_pct": 0.01,
+            "trailing_pct": 0.005
+        },
+        "take_profit": {
+            "type": "scaled",
+            "levels": [
+                {"pct": 0.02, "size": 0.3},
+                {"pct": 0.03, "size": 0.3},
+                {"pct": 0.04, "size": 0.4}
+            ]
+        }
+    },
+    "execution": {
+        "order_type": "market",
+        "time_in_force": "GTC",
+        "retry_attempts": 3,
+        "retry_delay": 1,
+        "slippage_tolerance": 0.001
+    },
+    "monitoring": {
+        "log_level": "INFO",
+        "save_trades": true,
+        "save_metrics": true,
+        "alert_thresholds": {
+            "max_drawdown": 0.1,
+            "min_win_rate": 0.4,
+            "max_loss_streak": 3
+        }
+    }
+} 

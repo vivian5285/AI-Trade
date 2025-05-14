@@ -115,13 +115,23 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.path == '/trading-bot' %}active{% endif %}" href="/trading-bot">
+                            <a class="nav-link {% if request.path == '/trading-bots' %}active{% endif %}" href="/trading-bots">
                                 <i class="bi bi-robot"></i> 交易机器人
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.path == '/trade_history' %}active{% endif %}" href="/trade_history">
                                 <i class="bi bi-graph-up"></i> 交易历史
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.path == '/strategy-logs' %}active{% endif %}" href="/strategy-logs">
+                                <i class="bi bi-file-earmark-text"></i> 策略日志
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.path == '/high-frequency' %}active{% endif %}" href="/high-frequency">
+                                <i class="fas fa-bolt"></i> 高频交易
                             </a>
                         </li>
                         <li class="nav-item">

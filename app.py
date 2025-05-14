@@ -15,7 +15,8 @@ import time
 import logging
 import subprocess
 import signal
-from functools import lru_cache
+from functools import lru_cache, wraps
+from trading_bot_manager import TradingBotManager
 
 # 加载环境变量
 load_dotenv()
@@ -52,15 +53,44 @@ class APIKey(db.Model):
 # 交易历史模型
 class TradeHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey('trading_bot_config.id'))  # 关联到交易机器人
     exchange = db.Column(db.String(20), nullable=False)
     symbol = db.Column(db.String(20), nullable=False)
     side = db.Column(db.String(10), nullable=False)  # BUY, SELL
+    position_type = db.Column(db.String(10), nullable=False)  # LONG, SHORT
     price = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), nullable=False)  # OPEN, CLOSED, CANCELLED
     strategy = db.Column(db.String(20))
     strategy_params = db.Column(db.String(255))
+    pnl = db.Column(db.Float)  # 盈亏金额
+    pnl_percentage = db.Column(db.Float)  # 盈亏百分比
+
+# 交易机器人配置模型
+class TradingBotConfig(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)  # 机器人名称
+    exchange = db.Column(db.String(20), nullable=False)  # 交易所
+    trading_pair = db.Column(db.String(20), nullable=False)  # 交易对
+    funds = db.Column(db.Float, nullable=False)  # 分配资金
+    strategies = db.Column(db.String(255), nullable=False)  # 策略列表（JSON格式）
+    kline_period = db.Column(db.String(10), nullable=False)  # K线周期
+    leverage = db.Column(db.Integer, nullable=False)  # 杠杆倍数
+    stop_loss = db.Column(db.Float, nullable=False)  # 止损比例
+    take_profit = db.Column(db.Float, nullable=False)  # 止盈比例
+    max_daily_trades = db.Column(db.Integer, nullable=False)  # 每日最大交易次数
+    status = db.Column(db.String(20), default='STOPPED')  # 运行状态：RUNNING/STOPPED
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# 交易机器人运行记录模型
+class TradingBotLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey('trading_bot_config.id'), nullable=False)
+    action = db.Column(db.String(50), nullable=False)  # 操作类型
+    details = db.Column(db.Text)  # 详细信息
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # 重新创建所有表
 with app.app_context():
@@ -299,387 +329,175 @@ def settings():
         logger.error(f"Error in settings route: {str(e)}")
         return render_template('error.html', error=str(e)), 500
 
-@app.route('/api/settings', methods=['GET', 'POST'])
-def handle_settings():
+@app.route('/api/settings', methods=['GET'])
+@handle_errors
+@log_request
+def get_settings():
     try:
-        if request.method == 'GET':
-            # 获取当前设置
-            current_settings = {
-                'current_exchange': os.getenv('CURRENT_EXCHANGE', 'binance'),
-                'scalpingEnabled': os.getenv('SCALPING_ENABLED', 'false'),
-                'supertrendEnabled': os.getenv('SUPERTREND_ENABLED', 'false'),
-                'rsiEnabled': os.getenv('RSI_ENABLED', 'false'),
-                'bbEnabled': os.getenv('BB_ENABLED', 'false'),
-                'tradingPair': os.getenv('TRADING_PAIR', 'BTCUSDT'),
-                'leverage': os.getenv('LEVERAGE', '10'),
-                'quantity': os.getenv('QUANTITY', '0.001'),
-                'stopLoss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
-                'takeProfit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6'),
-                'maxDailyTrades': os.getenv('MAX_DAILY_TRADES', '100')
-            }
-            return jsonify({'success': True, **current_settings})
-            
-        elif request.method == 'POST':
-            data = request.get_json()
-            if not data:
-                return jsonify({'success': False, 'error': '无效的请求数据'}), 400
-                
-            # 更新环境变量
-            env_file = '.env'
-            env_vars = {}
-            
-            # 读取现有的环境变量
-            if os.path.exists(env_file):
-                with open(env_file, 'r') as f:
-                    for line in f:
-                        if '=' in line:
-                            key, value = line.strip().split('=', 1)
-                            env_vars[key] = value
-            
-            # 更新环境变量
-            for key, value in data.items():
-                if key in ['current_exchange', 'scalpingEnabled', 'supertrendEnabled', 
-                          'rsiEnabled', 'bbEnabled', 'tradingPair', 'leverage', 
-                          'quantity', 'stopLoss', 'takeProfit', 'maxDailyTrades']:
-                    env_vars[key.upper()] = str(value)
-            
-            # 写入环境变量文件
-            with open(env_file, 'w') as f:
-                for key, value in env_vars.items():
-                    f.write(f"{key}={value}\n")
-            
-            # 重新加载环境变量
-            load_dotenv(override=True)
-            
-            return jsonify({
-                'success': True,
-                'message': '设置已更新'
-            })
-            
+        # 从.env文件加载设置
+        settings = load_config()
+        
+        # 获取当前选择的交易所
+        current_exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
+        
+        # 获取策略启用状态
+        settings['trading_settings'].update({
+            'exchange': current_exchange,
+            'scalpingEnabled': os.getenv('SCALPING_ENABLED', 'false'),
+            'supertrendEnabled': os.getenv('SUPERTREND_ENABLED', 'false'),
+            'rsiEnabled': os.getenv('RSI_ENABLED', 'false'),
+            'bbEnabled': os.getenv('BB_ENABLED', 'false'),
+            'ichimokuEnabled': os.getenv('ICHIMOKU_ENABLED', 'false'),
+            'vwapEnabled': os.getenv('VWAP_ENABLED', 'false')
+        })
+        
+        return api_response(
+            data=settings['trading_settings']
+        )
     except Exception as e:
-        logger.error(f"Error in handle_settings: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        logger.error(f"Error getting settings: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取设置失败",
+            status_code=500
+        )
 
-# API密钥验证函数
-def validate_api_key(exchange, api_key, api_secret):
+@app.route('/api/settings', methods=['POST'])
+@handle_errors
+@log_request
+@validate_params('exchange', 'trading_pair', 'leverage', 'stop_loss', 'take_profit', 'max_daily_trades')
+def update_settings():
     try:
-        if exchange.lower() == 'binance':
-            client = Client(api_key, api_secret)
-            # 测试API连接
-            client.get_account()
-            return True
-        elif exchange.lower() == 'lbank':
-            timestamp = str(int(time.time() * 1000))
-            params = {
-                'api_key': api_key,
-                'timestamp': timestamp
-            }
-            sign = generate_lbank_sign(params, api_secret)
-            params['sign'] = sign
-            
-            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-            data = response.json()
-            
-            return data.get('result', False)
-        return False
-    except Exception as e:
-        print(f"API验证错误: {str(e)}")
-        return False
-
-# 加载配置
-def load_config():
-    config = {
-        'lbank_api_key': os.getenv('BINANCE_API_KEY'),
-        'lbank_api_secret': os.getenv('BINANCE_API_SECRET'),
-        'trading_settings': {
-            # 基础交易设置
-            'trading_pair': os.getenv('TRADING_PAIR', 'ETHUSDT'),
-            'leverage': os.getenv('LEVERAGE', '50'),
-            'quantity': os.getenv('QUANTITY', '0.2'),
-            
-            # 高频交易策略参数
-            'trend_ema_fast': os.getenv('TREND_EMA_FAST', '1'),  # 1分钟快速EMA
-            'trend_ema_slow': os.getenv('TREND_EMA_SLOW', '3'),  # 3分钟慢速EMA
-            'grid_size': os.getenv('GRID_SIZE', '50'),  # 网格数量
-            'grid_spacing': os.getenv('GRID_SPACING', '0.05'),  # 网格间距0.05%
-            'scalping_profit_target': os.getenv('SCALPING_PROFIT_TARGET', '0.1'),  # 0.1%止盈
-            'scalping_stop_loss': os.getenv('SCALPING_STOP_LOSS', '0.05'),  # 0.05%止损
-            
-            # 风险控制参数
-            'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '0.2'),  # 0.2%止损
-            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.4'),  # 0.4%止盈
-            'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '500'),  # 每日最大交易次数
-            'max_daily_loss': os.getenv('MAX_DAILY_LOSS_PERCENTAGE', '5'),  # 每日最大亏损5%
-            'min_volume': os.getenv('MIN_VOLUME_THRESHOLD', '1000000'),  # 最小交易量100万USDT
-            
-            # 通知设置
-            'notification_email': os.getenv('NOTIFICATION_EMAIL', ''),
-            'telegram_bot_token': os.getenv('TELEGRAM_BOT_TOKEN', ''),
-            'email_notifications': os.getenv('EMAIL_NOTIFICATIONS', 'false').lower() == 'true',
-            'telegram_notifications': os.getenv('TELEGRAM_NOTIFICATIONS', 'false').lower() == 'true'
-        }
-    }
-    return config
-
-def get_lbank_balance(config):
-    try:
-        timestamp = str(int(time.time() * 1000))
-        params = {
-            'api_key': config['lbank_api_key'],
-            'timestamp': timestamp
-        }
-        sign = generate_lbank_sign(params, config['lbank_api_secret'])
-        params['sign'] = sign
+        settings = request.json
         
-        response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-        data = response.json()
-        
-        if data['result']:
-            return {balance['asset']: float(balance['balance']) for balance in data['data']}
-        return None
-    except Exception as e:
-        print(f'获取LBank余额失败: {str(e)}')
-        return None
-
-def get_lbank_trades(config):
-    try:
-        timestamp = str(int(time.time() * 1000))
-        params = {
-            'api_key': config['lbank_api_key'],
-            'timestamp': timestamp
-        }
-        sign = generate_lbank_sign(params, config['lbank_api_secret'])
-        params['sign'] = sign
-        
-        response = requests.get('https://api.lbank.info/v2/order_history', params=params)
-        data = response.json()
-        
-        if data['result']:
-            return data['data']
-        return []
-    except Exception as e:
-        print(f'获取LBank交易记录失败: {str(e)}')
-        return []
-
-def generate_lbank_sign(params, api_secret):
-    sorted_params = sorted(params.items(), key=lambda x: x[0])
-    sign_str = '&'.join([f"{k}={v}" for k, v in sorted_params])
-    return hmac.new(
-        api_secret.encode(),
-        sign_str.encode(),
-        hashlib.sha256
-    ).hexdigest()
-
-def create_balance_chart(trades):
-    if not trades:
-        return None
-        
-    df = pd.DataFrame(trades)
-    df['timestamp'] = pd.to_datetime(df['time'], unit='ms')
-    df['balance'] = df['realizedPnl'].cumsum()
-    
-    trace = go.Scatter(
-        x=df['timestamp'],
-        y=df['balance'],
-        mode='lines',
-        name='余额'
-    )
-    
-    layout = go.Layout(
-        title='账户余额变化',
-        xaxis={'title': '时间'},
-        yaxis={'title': '余额 (USDT)'}
-    )
-    
-    fig = go.Figure(data=[trace], layout=layout)
-    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-
-# 路由：获取市场数据
-@app.route('/api/market-data')
-def get_market_data():
-    try:
-        # 获取当前交易所
-        current_exchange = os.getenv('CURRENT_EXCHANGE', 'Binance')
-        
-        if current_exchange == 'Binance':
-            # 获取Binance API密钥
-            api_key = APIKey.query.filter_by(exchange='Binance', is_active=True).first()
-            if not api_key:
-                return jsonify({'error': 'No active Binance API key found'}), 401
-            
-            # 初始化Binance客户端
-            client = Client(api_key.api_key, api_key.api_secret)
-            
-            # 获取BTC/USDT和ETH/USDT的24小时行情
-            btc_ticker = client.get_ticker(symbol='BTCUSDT')
-            eth_ticker = client.get_ticker(symbol='ETHUSDT')
-            
-            # 获取K线数据
-            btc_klines = client.get_klines(
-                symbol='BTCUSDT',
-                interval=Client.KLINE_INTERVAL_1MINUTE,
-                limit=100
+        # 验证设置
+        if not all(key in settings for key in ['exchange', 'trading_pair', 'leverage', 'stop_loss', 'take_profit', 'max_daily_trades']):
+            return api_response(
+                success=False,
+                error="缺少必要的设置项",
+                message="请提供所有必要的设置参数",
+                status_code=400
             )
-            eth_klines = client.get_klines(
-                symbol='ETHUSDT',
-                interval=Client.KLINE_INTERVAL_1MINUTE,
-                limit=100
+        
+        # 更新设置
+        with open('config.json', 'w') as f:
+            json.dump(settings, f, indent=4)
+        
+        # 更新环境变量
+        os.environ['CURRENT_EXCHANGE'] = settings['exchange']
+        
+        return api_response(
+            message="设置已更新"
+        )
+    except Exception as e:
+        logger.error(f"Error updating settings: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="更新设置失败",
+            status_code=500
+        )
+
+@app.route('/api/trades')
+@handle_errors
+@log_request
+def get_trades():
+    try:
+        # 获取所有交易记录，按时间倒序排列，并关联机器人信息
+        trades = db.session.query(
+            TradeHistory,
+            TradingBotConfig.name.label('bot_name')
+        ).outerjoin(
+            TradingBotConfig,
+            TradeHistory.bot_id == TradingBotConfig.id
+        ).order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        
+        return api_response(
+            data={
+                'trades': [{
+                    'id': trade.TradeHistory.id,
+                    'bot_id': trade.TradeHistory.bot_id,
+                    'bot_name': trade.bot_name,
+                    'exchange': trade.TradeHistory.exchange,
+                    'symbol': trade.TradeHistory.symbol,
+                    'side': trade.TradeHistory.side,
+                    'position_type': trade.TradeHistory.position_type,
+                    'price': trade.TradeHistory.price,
+                    'quantity': trade.TradeHistory.quantity,
+                    'timestamp': trade.TradeHistory.timestamp.isoformat(),
+                    'status': trade.TradeHistory.status,
+                    'strategy': trade.TradeHistory.strategy,
+                    'strategy_params': trade.TradeHistory.strategy_params,
+                    'pnl': trade.TradeHistory.pnl,
+                    'pnl_percentage': trade.TradeHistory.pnl_percentage
+                } for trade in trades]
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting trades: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取交易历史失败",
+            status_code=500
+        )
+
+@app.route('/api/trades/<int:trade_id>')
+@handle_errors
+@log_request
+def get_trade_detail(trade_id):
+    try:
+        # 获取单个交易记录，并关联机器人信息
+        trade = db.session.query(
+            TradeHistory,
+            TradingBotConfig.name.label('bot_name')
+        ).outerjoin(
+            TradingBotConfig,
+            TradeHistory.bot_id == TradingBotConfig.id
+        ).filter(TradeHistory.id == trade_id).first()
+        
+        if not trade:
+            return api_response(
+                success=False,
+                error="交易记录不存在",
+                message="未找到指定的交易记录",
+                status_code=404
             )
-            
-            # 处理K线数据
-            def process_klines(klines):
-                return [{
-                    'time': k[0] // 1000,  # 转换为秒级时间戳
-                    'open': float(k[1]),
-                    'high': float(k[2]),
-                    'low': float(k[3]),
-                    'close': float(k[4]),
-                    'volume': float(k[5])
-                } for k in klines]
-            
-            return jsonify({
-                'btc': {
-                    'price': float(btc_ticker['lastPrice']),
-                    'change_24h': float(btc_ticker['priceChangePercent']),
-                    'klines': process_klines(btc_klines)
-                },
-                'eth': {
-                    'price': float(eth_ticker['lastPrice']),
-                    'change_24h': float(eth_ticker['priceChangePercent']),
-                    'klines': process_klines(eth_klines)
+        
+        return api_response(
+            data={
+                'trade': {
+                    'id': trade.TradeHistory.id,
+                    'bot_id': trade.TradeHistory.bot_id,
+                    'bot_name': trade.bot_name,
+                    'exchange': trade.TradeHistory.exchange,
+                    'symbol': trade.TradeHistory.symbol,
+                    'side': trade.TradeHistory.side,
+                    'position_type': trade.TradeHistory.position_type,
+                    'price': trade.TradeHistory.price,
+                    'quantity': trade.TradeHistory.quantity,
+                    'timestamp': trade.TradeHistory.timestamp.isoformat(),
+                    'status': trade.TradeHistory.status,
+                    'strategy': trade.TradeHistory.strategy,
+                    'strategy_params': trade.TradeHistory.strategy_params,
+                    'pnl': trade.TradeHistory.pnl,
+                    'pnl_percentage': trade.TradeHistory.pnl_percentage
                 }
-            })
-            
-        elif current_exchange == 'LBank':
-            # LBank的现有代码保持不变
-            api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
-            if not api_key:
-                return jsonify({'error': 'No active LBank API key found'}), 401
-            
-            headers = {
-                'api_key': api_key.api_key,
-                'secret_key': api_key.api_secret
             }
-            
-            # 获取BTC/USDT和ETH/USDT的行情
-            btc_response = requests.get('https://api.lbank.info/v2/ticker.do?symbol=btc_usdt', headers=headers)
-            eth_response = requests.get('https://api.lbank.info/v2/ticker.do?symbol=eth_usdt', headers=headers)
-            
-            if btc_response.status_code == 200 and eth_response.status_code == 200:
-                btc_data = btc_response.json()['data'][0]
-                eth_data = eth_response.json()['data'][0]
-                
-                return jsonify({
-                    'btc': {
-                        'price': float(btc_data['ticker']['latest']),
-                        'change_24h': float(btc_data['ticker']['change'])
-                    },
-                    'eth': {
-                        'price': float(eth_data['ticker']['latest']),
-                        'change_24h': float(eth_data['ticker']['change'])
-                    }
-                })
-            else:
-                return jsonify({'error': 'Failed to fetch LBank data'}), 500
-                
+        )
     except Exception as e:
-        app.logger.error(f"Error fetching market data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error getting trade detail: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取交易详情失败",
+            status_code=500
+        )
 
-# 路由：获取账户数据
-@app.route('/api/account-data')
-def get_account_data():
-    try:
-        # 获取当前交易所
-        current_exchange = os.getenv('CURRENT_EXCHANGE', 'Binance')
-        
-        if current_exchange == 'Binance':
-            # 获取Binance API密钥
-            api_key = APIKey.query.filter_by(exchange='Binance', is_active=True).first()
-            if not api_key:
-                return jsonify({'error': 'No active Binance API key found'}), 401
-            
-            # 初始化Binance客户端
-            client = Client(api_key.api_key, api_key.api_secret)
-            
-            # 获取账户信息
-            account = client.get_account()
-            
-            # 计算总余额
-            total_balance = 0
-            positions = []
-            
-            for asset in account['balances']:
-                free = float(asset['free'])
-                locked = float(asset['locked'])
-                if free > 0 or locked > 0:
-                    # 获取USDT价格
-                    if asset['asset'] != 'USDT':
-                        try:
-                            ticker = client.get_symbol_ticker(symbol=f"{asset['asset']}USDT")
-                            price = float(ticker['price'])
-                        except:
-                            price = 0
-                    else:
-                        price = 1
-                    
-                    value = (free + locked) * price
-                    total_balance += value
-                    
-                    if free > 0 or locked > 0:
-                        positions.append({
-                            'asset': asset['asset'],
-                            'free': free,
-                            'locked': locked,
-                            'value': value
-                        })
-            
-            # 获取今日盈亏（这里需要实现具体的盈亏计算逻辑）
-            daily_pnl = 0  # 需要实现
-            
-            return jsonify({
-                'total_balance': total_balance,
-                'daily_pnl': daily_pnl,
-                'positions': positions
-            })
-            
-        elif current_exchange == 'LBank':
-            # LBank的现有代码保持不变
-            api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
-            if not api_key:
-                return jsonify({'error': 'No active LBank API key found'}), 401
-            
-            headers = {
-                'api_key': api_key.api_key,
-                'secret_key': api_key.api_secret
-            }
-            
-            # 获取账户信息
-            response = requests.get('https://api.lbank.info/v2/user_info.do', headers=headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data['result']:
-                    account_data = data['data']
-                    return jsonify({
-                        'total_balance': float(account_data['total_asset']),
-                        'daily_pnl': float(account_data['today_profit']),
-                        'positions': account_data['free']
-                    })
-                else:
-                    return jsonify({'error': 'Failed to get LBank account data'}), 500
-            else:
-                return jsonify({'error': 'Failed to fetch LBank data'}), 500
-                
-    except Exception as e:
-        app.logger.error(f"Error fetching account data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-# API路由：图表数据
 @app.route('/api/chart-data')
+@handle_errors
+@log_request
 def chart_data():
     try:
         config = load_config()
@@ -711,763 +529,20 @@ def chart_data():
                 else:
                     trade_stats['values'][2] += 1
         
-        return jsonify({
-            'equity': {
-                'timestamps': [t['timestamp'] for t in equity_data],
-                'values': [t['value'] for t in equity_data]
-            },
-            'stats': trade_stats
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# API密钥管理路由
-@app.route('/api/keys/<int:key_id>', methods=['GET'])
-def get_api_key(key_id):
-    try:
-        key = APIKey.query.get_or_404(key_id)
-        return jsonify({
-            'success': True,
-            'exchange': key.exchange,
-            'api_key': key.api_key,
-            'api_secret': key.api_secret
-        })
-    except Exception as e:
-        logger.error(f"Error getting API key: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/keys/<int:key_id>', methods=['PUT'])
-def update_api_key(key_id):
-    try:
-        key = APIKey.query.get_or_404(key_id)
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'success': False, 'error': '无效的请求数据'}), 400
-            
-        # 验证API密钥
-        if not validate_api_key(data['exchange'], data['api_key'], data['api_secret']):
-            return jsonify({'success': False, 'error': '无效的API凭证'}), 400
-        
-        key.exchange = data['exchange']
-        key.api_key = data['api_key']
-        key.api_secret = data['api_secret']
-        
-        db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': 'API密钥已更新'
-        })
-    except Exception as e:
-        logger.error(f"Error updating API key: {str(e)}")
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/keys/<int:key_id>/toggle', methods=['POST'])
-def toggle_api_key(key_id):
-    try:
-        key = APIKey.query.get_or_404(key_id)
-        key.is_active = not key.is_active
-        db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': 'API密钥状态已更新'
-        })
-    except Exception as e:
-        logger.error(f"Error toggling API key: {str(e)}")
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/keys/<int:key_id>', methods=['DELETE'])
-def delete_api_key(key_id):
-    try:
-        key = APIKey.query.get_or_404(key_id)
-        db.session.delete(key)
-        db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': 'API密钥已删除'
-        })
-    except Exception as e:
-        logger.error(f"Error deleting API key: {str(e)}")
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/settings', methods=['GET'])
-def get_settings():
-    try:
-        # 从.env文件加载设置
-        settings = load_config()
-        
-        # 获取当前选择的交易所
-        current_exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
-        
-        # 获取策略启用状态
-        settings['trading_settings'].update({
-            'exchange': current_exchange,
-            'scalpingEnabled': os.getenv('SCALPING_ENABLED', 'false'),
-            'supertrendEnabled': os.getenv('SUPERTREND_ENABLED', 'false'),
-            'rsiEnabled': os.getenv('RSI_ENABLED', 'false'),
-            'bbEnabled': os.getenv('BB_ENABLED', 'false'),
-            'ichimokuEnabled': os.getenv('ICHIMOKU_ENABLED', 'false'),
-            'vwapEnabled': os.getenv('VWAP_ENABLED', 'false')
-        })
-        
-        return jsonify(settings['trading_settings'])
-    except Exception as e:
-        logger.error(f"Error getting settings: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/trading-bot')
-def trading_bot():
-    try:
-        # 获取当前策略设置
-        settings = {
-            'rsi_period': int(os.getenv('RSI_PERIOD', 14)),
-            'rsi_overbought': int(os.getenv('RSI_OVERBOUGHT', 70)),
-            'rsi_oversold': int(os.getenv('RSI_OVERSOLD', 30)),
-            'bb_period': int(os.getenv('BB_PERIOD', 20)),
-            'bb_std': float(os.getenv('BB_STD', 2.0)),
-            'supertrend_atr_period': int(os.getenv('SUPERTREND_ATR_PERIOD', 10)),
-            'supertrend_atr_multiplier': float(os.getenv('SUPERTREND_ATR_MULTIPLIER', 3.0)),
-            'grid_count': int(os.getenv('GRID_COUNT', 10)),
-            'grid_spacing': float(os.getenv('GRID_SPACING', 1.0))
-        }
-        
-        # 获取最近的交易记录
-        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(50).all()
-        
-        return render_template('trading_bot.html', settings=settings, trades=trades)
-    except Exception as e:
-        logger.error(f"Error loading trading bot page: {str(e)}")
-        return render_template('error.html', error="加载交易机器人页面时出错")
-
-@app.route('/api/trading-bot/status')
-def get_bot_status():
-    return jsonify({
-        'success': True,
-        'is_running': trading_bot_running
-    })
-
-@app.route('/api/trading-bot/start', methods=['POST'])
-def start_trading_bot():
-    global trading_bot_running
-    try:
-        if trading_bot_running:
-            return jsonify({
-                'success': False,
-                'error': '交易机器人已经在运行中'
-            })
-        
-        # 启动交易机器人的逻辑
-        trading_bot_running = True
-        logger.info("交易机器人已启动")
-        
-        return jsonify({
-            'success': True,
-            'message': '交易机器人已启动'
-        })
-    except Exception as e:
-        logger.error(f"Error starting trading bot: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/api/trading-bot/stop', methods=['POST'])
-def stop_trading_bot():
-    global trading_bot_running
-    try:
-        if not trading_bot_running:
-            return jsonify({
-                'success': False,
-                'error': '交易机器人已经停止'
-            })
-        
-        # 停止交易机器人的逻辑
-        trading_bot_running = False
-        logger.info("交易机器人已停止")
-        
-        return jsonify({
-            'success': True,
-            'message': '交易机器人已停止'
-        })
-    except Exception as e:
-        logger.error(f"Error stopping trading bot: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/api/trading-bot/restart', methods=['POST'])
-def restart_trading_bot():
-    try:
-        # 先停止
-        stop_trading_bot()
-        # 再启动
-        return start_trading_bot()
-    except Exception as e:
-        logger.error(f"Error restarting trading bot: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/api/trading-bot/logs')
-def get_bot_logs():
-    try:
-        # 读取最近的日志
-        log_file = 'app.log'
-        if not os.path.exists(log_file):
-            return jsonify({
-                'success': False,
-                'error': '日志文件不存在'
-            })
-        
-        # 读取最后100行日志
-        with open(log_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            last_lines = lines[-100:] if len(lines) > 100 else lines
-        
-        # 解析日志
-        logs = []
-        for line in last_lines:
-            try:
-                # 假设日志格式为: [时间戳] 级别: 消息
-                parts = line.split('] ', 1)
-                if len(parts) == 2:
-                    timestamp = parts[0].strip('[')
-                    message = parts[1].strip()
-                    logs.append({
-                        'timestamp': timestamp,
-                        'message': message
-                    })
-            except:
-                continue
-        
-        return jsonify({
-            'success': True,
-            'logs': logs
-        })
-    except Exception as e:
-        logger.error(f"Error getting bot logs: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-# 资金管理和风险控制
-def calculate_position_size(balance, symbol, exchange='Binance'):
-    try:
-        # 获取当前价格
-        if exchange == 'Binance':
-            client = get_binance_client()
-            ticker = client.get_ticker(symbol=symbol)
-            current_price = float(ticker['lastPrice'])
-        elif exchange == 'LBank':
-            response = requests.get(f'https://api.lbank.info/v2/ticker.do?symbol={symbol.lower()}')
-            data = response.json()
-            if data['result']:
-                current_price = float(data['data'][0]['ticker']['latest'])
-            else:
-                raise Exception("Failed to get LBank ticker data")
-        
-        # 风险控制参数
-        max_risk_per_trade = 0.02  # 单笔交易最大风险（总资金的2%）
-        max_total_risk = 0.1  # 总持仓最大风险（总资金的10%）
-        min_position_size = 10  # 最小仓位（USDT）
-        max_position_size = balance * 0.5  # 最大仓位（总资金的50%）
-        
-        # 获取当前持仓
-        if exchange == 'Binance':
-            positions = client.futures_position_information()
-            current_positions = sum(abs(float(pos['positionAmt']) * float(pos['entryPrice'])) 
-                                 for pos in positions if float(pos['positionAmt']) != 0)
-        elif exchange == 'LBank':
-            api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
-            if not api_key:
-                raise Exception("No active LBank API key found")
-                
-            timestamp = str(int(time.time() * 1000))
-            params = {
-                'api_key': api_key.api_key,
-                'timestamp': timestamp
+        return api_response(
+            data={
+                'equity_data': equity_data,
+                'trade_stats': trade_stats
             }
-            sign = generate_lbank_sign(params, api_key.api_secret)
-            params['sign'] = sign
-            
-            response = requests.get('https://api.lbank.info/v2/user/positions', params=params)
-            positions = response.json()
-            
-            if not positions['result']:
-                raise Exception("Failed to get LBank positions")
-                
-            current_positions = sum(float(pos['positionValue']) for pos in positions['data'])
-        
-        # 计算可用风险额度
-        available_risk = balance * max_total_risk - current_positions
-        
-        # 如果可用风险额度小于最小仓位，返回None
-        if available_risk < min_position_size:
-            logger.warning(f"Available risk ({available_risk} USDT) is less than minimum position size ({min_position_size} USDT)")
-            return None
-            
-        # 计算建议仓位大小
-        suggested_position = min(
-            max(min_position_size, balance * max_risk_per_trade),  # 单笔交易风险限制
-            max_position_size,  # 最大仓位限制
-            available_risk  # 可用风险额度限制
         )
-        
-        # 根据价格计算数量
-        quantity = suggested_position / current_price
-        
-        # 获取交易对精度
-        if exchange == 'Binance':
-            exchange_info = client.get_exchange_info()
-            symbol_info = next((s for s in exchange_info['symbols'] if s['symbol'] == symbol), None)
-            if symbol_info:
-                quantity_precision = next((f['stepSize'] for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), '0.00001')
-                quantity_precision = len(str(float(quantity_precision)).rstrip('0').split('.')[-1])
-                quantity = round(quantity, quantity_precision)
-        elif exchange == 'LBank':
-            # LBank通常使用8位小数
-            quantity = round(quantity, 8)
-            
-        return {
-            'position_size': suggested_position,
-            'quantity': quantity,
-            'current_price': current_price,
-            'available_risk': available_risk,
-            'current_positions': current_positions
-        }
     except Exception as e:
-        logger.error(f"Error calculating position size: {str(e)}")
-        return None
-
-# 添加K线数据缓存
-@lru_cache(maxsize=100)
-def get_cached_klines(symbol, timeframe, timestamp):
-    try:
-        current_exchange = os.getenv('CURRENT_EXCHANGE', 'Binance')
-        if current_exchange == 'Binance':
-            client = get_binance_client()
-            klines = client.get_klines(symbol=symbol, interval=timeframe, limit=100)
-            df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
-        elif current_exchange == 'LBank':
-            response = requests.get(f'https://api.lbank.info/v2/kline.do?symbol={symbol.lower()}&size=100&type={timeframe}')
-            data = response.json()
-            if data['result']:
-                df = pd.DataFrame(data['data'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            else:
-                raise Exception("Failed to get LBank kline data")
-        
-        # 转换数据类型
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df['open'] = df['open'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        df['close'] = df['close'].astype(float)
-        df['volume'] = df['volume'].astype(float)
-        
-        return df.to_dict('records')
-    except Exception as e:
-        logger.error(f"Error getting cached klines: {str(e)}")
-        return None
-
-# 添加K线数据API路由
-@app.route('/api/kline-data')
-def get_kline_data():
-    try:
-        symbol = request.args.get('symbol', 'BTCUSDT')
-        timeframe = request.args.get('timeframe', '1m')
-        
-        # 获取当前时间戳（每分钟更新一次）
-        current_timestamp = int(time.time() / 60)
-        
-        # 获取K线数据
-        klines = get_cached_klines(symbol, timeframe, current_timestamp)
-        
-        if klines:
-            return jsonify({
-                'success': True,
-                'data': klines
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to get kline data'
-            }), 500
-    except Exception as e:
-        logger.error(f"Error getting kline data: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-# 修改策略检查函数
-def check_strategy_conditions(symbol, timeframe='1m'):
-    try:
-        # 获取当前时间戳（每分钟更新一次）
-        current_timestamp = int(time.time() / 60)
-        
-        # 获取K线数据
-        klines = get_cached_klines(symbol, timeframe, current_timestamp)
-        if not klines:
-            return None
-            
-        df = pd.DataFrame(klines)
-        
-        # 获取当前启用的策略
-        enabled_strategies = []
-        if os.getenv('SCALPING_ENABLED', 'false').lower() == 'true':
-            enabled_strategies.append('scalping')
-        if os.getenv('SUPERTREND_ENABLED', 'false').lower() == 'true':
-            enabled_strategies.append('supertrend')
-        if os.getenv('RSI_ENABLED', 'false').lower() == 'true':
-            enabled_strategies.append('rsi')
-        if os.getenv('BB_ENABLED', 'false').lower() == 'true':
-            enabled_strategies.append('bollinger_bands')
-            
-        if not enabled_strategies:
-            logger.warning("No trading strategies are enabled")
-            return None
-            
-        # 获取账户余额
-        current_exchange = os.getenv('CURRENT_EXCHANGE', 'Binance')
-        if current_exchange == 'Binance':
-            client = get_binance_client()
-            account = client.get_account()
-            balance = float([asset for asset in account['balances'] if asset['asset'] == 'USDT'][0]['free'])
-        elif current_exchange == 'LBank':
-            api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
-            if not api_key:
-                raise Exception("No active LBank API key found")
-                
-            timestamp = str(int(time.time() * 1000))
-            params = {
-                'api_key': api_key.api_key,
-                'timestamp': timestamp
-            }
-            sign = generate_lbank_sign(params, api_key.api_secret)
-            params['sign'] = sign
-            
-            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-            account = response.json()
-            
-            if not account['result']:
-                raise Exception("Failed to get LBank account info")
-                
-            balance = float([asset for asset in account['data'] if asset['asset'] == 'usdt'][0]['free'])
-        
-        # 计算建议仓位
-        position_info = calculate_position_size(balance, symbol, current_exchange)
-        if not position_info:
-            logger.warning("Cannot calculate position size, skipping trade")
-            return None
-            
-        # 初始化信号字典
-        signals = {}
-        strategy_params = {}
-        
-        # 检查每个启用的策略
-        for strategy in enabled_strategies:
-            if strategy == 'scalping':
-                signals['scalping'] = check_scalping_strategy(df)
-                if signals['scalping']:
-                    strategy_params['scalping'] = {
-                        'grid_levels': position_info['grid_levels'],
-                        'grid_spacing': position_info['grid_spacing']
-                    }
-            elif strategy == 'supertrend':
-                signals['supertrend'] = check_supertrend_strategy(df)
-                if signals['supertrend']:
-                    strategy_params['supertrend'] = {
-                        'period': 10,
-                        'multiplier': 3
-                    }
-            elif strategy == 'rsi':
-                signals['rsi'] = check_rsi_strategy(df)
-                if signals['rsi']:
-                    strategy_params['rsi'] = {
-                        'period': 14,
-                        'overbought': 70,
-                        'oversold': 30
-                    }
-            elif strategy == 'bollinger_bands':
-                signals['bollinger_bands'] = check_bollinger_bands_strategy(df)
-                if signals['bollinger_bands']:
-                    strategy_params['bollinger_bands'] = {
-                        'period': 20,
-                        'std_dev': 2
-                    }
-        
-        # 返回交易信号和策略参数
-        for strategy, signal in signals.items():
-            if signal:
-                return {
-                    'strategy': strategy,
-                    'signal': signal,
-                    'params': strategy_params.get(strategy, {})
-                }
-        
-        return None
-    except Exception as e:
-        logger.error(f"Error checking strategy conditions: {str(e)}")
-        return None
-
-# 智能网格计算
-def calculate_grid_parameters(balance, symbol, exchange='Binance'):
-    try:
-        # 获取当前价格
-        if exchange == 'Binance':
-            client = get_binance_client()
-            ticker = client.get_ticker(symbol=symbol)
-            current_price = float(ticker['lastPrice'])
-        elif exchange == 'LBank':
-            response = requests.get(f'https://api.lbank.info/v2/ticker.do?symbol={symbol.lower()}')
-            data = response.json()
-            if data['result']:
-                current_price = float(data['data'][0]['ticker']['latest'])
-            else:
-                raise Exception("Failed to get LBank ticker data")
-        
-        # 计算基础参数
-        min_grid_amount = 10  # 最小网格金额（USDT）
-        max_grid_amount = 1000  # 最大网格金额（USDT）
-        min_grids = 5  # 最小网格数量
-        max_grids = 50  # 最大网格数量
-        
-        # 根据余额计算网格数量
-        if balance <= 100:  # 小资金
-            grid_count = min_grids
-            grid_amount = min_grid_amount
-        elif balance <= 1000:  # 中等资金
-            grid_count = int(balance / 50)  # 每50USDT一个网格
-            grid_amount = balance / grid_count
-        elif balance <= 10000:  # 大资金
-            grid_count = int(balance / 200)  # 每200USDT一个网格
-            grid_amount = balance / grid_count
-        else:  # 超大资金
-            grid_count = max_grids
-            grid_amount = balance / grid_count
-            
-        # 确保网格数量在合理范围内
-        grid_count = max(min_grids, min(grid_count, max_grids))
-        grid_amount = max(min_grid_amount, min(grid_amount, max_grid_amount))
-        
-        # 计算网格间距
-        # 根据价格波动率动态调整网格间距
-        if exchange == 'Binance':
-            klines = client.get_klines(symbol=symbol, interval='1h', limit=24)
-            df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
-        else:
-            response = requests.get(f'https://api.lbank.info/v2/kline.do?symbol={symbol.lower()}&size=24&type=1h')
-            data = response.json()
-            if data['result']:
-                df = pd.DataFrame(data['data'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            else:
-                raise Exception("Failed to get LBank kline data")
-                
-        df['close'] = df['close'].astype(float)
-        volatility = df['close'].pct_change().std() * 100  # 计算24小时波动率
-        
-        # 根据波动率调整网格间距
-        if volatility <= 1:  # 低波动
-            grid_spacing = 0.2  # 0.2%
-        elif volatility <= 2:  # 中等波动
-            grid_spacing = 0.3  # 0.3%
-        elif volatility <= 3:  # 高波动
-            grid_spacing = 0.4  # 0.4%
-        else:  # 超高波动
-            grid_spacing = 0.5  # 0.5%
-            
-        # 计算上下限价格
-        upper_price = current_price * (1 + (grid_count * grid_spacing / 200))
-        lower_price = current_price * (1 - (grid_count * grid_spacing / 200))
-        
-        # 计算每个网格的价格
-        grid_prices = []
-        for i in range(grid_count + 1):
-            price = lower_price + (upper_price - lower_price) * i / grid_count
-            grid_prices.append(round(price, 8))
-            
-        return {
-            'grid_count': grid_count,
-            'grid_amount': grid_amount,
-            'grid_spacing': grid_spacing,
-            'current_price': current_price,
-            'upper_price': upper_price,
-            'lower_price': lower_price,
-            'grid_prices': grid_prices,
-            'volatility': volatility
-        }
-    except Exception as e:
-        logger.error(f"Error calculating grid parameters: {str(e)}")
-        return None
-
-# 修改高频交易策略，使用智能网格
-def check_scalping_strategy(df):
-    try:
-        # 获取账户余额
-        current_exchange = os.getenv('CURRENT_EXCHANGE', 'Binance')
-        trading_pair = os.getenv('TRADING_PAIR', 'BTCUSDT')
-        
-        if current_exchange == 'Binance':
-            client = get_binance_client()
-            account = client.get_account()
-            balance = float([asset for asset in account['balances'] if asset['asset'] == 'USDT'][0]['free'])
-        elif current_exchange == 'LBank':
-            api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
-            if not api_key:
-                raise Exception("No active LBank API key found")
-                
-            timestamp = str(int(time.time() * 1000))
-            params = {
-                'api_key': api_key.api_key,
-                'timestamp': timestamp
-            }
-            sign = generate_lbank_sign(params, api_key.api_secret)
-            params['sign'] = sign
-            
-            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-            account = response.json()
-            
-            if not account['result']:
-                raise Exception("Failed to get LBank account info")
-                
-            balance = float([asset for asset in account['data'] if asset['asset'] == 'usdt'][0]['free'])
-            
-        # 计算网格参数
-        grid_params = calculate_grid_parameters(balance, trading_pair, current_exchange)
-        if not grid_params:
-            return None
-            
-        # 获取当前价格
-        current_price = df['close'].iloc[-1]
-        
-        # 找到当前价格所在的网格区间
-        for i in range(len(grid_params['grid_prices']) - 1):
-            if grid_params['grid_prices'][i] <= current_price <= grid_params['grid_prices'][i + 1]:
-                # 如果价格接近下边界，给出买入信号
-                if (current_price - grid_params['grid_prices'][i]) / (grid_params['grid_prices'][i + 1] - grid_params['grid_prices'][i]) < 0.2:
-                    return 'BUY'
-                # 如果价格接近上边界，给出卖出信号
-                elif (current_price - grid_params['grid_prices'][i]) / (grid_params['grid_prices'][i + 1] - grid_params['grid_prices'][i]) > 0.8:
-                    return 'SELL'
-                break
-                
-        return None
-    except Exception as e:
-        logger.error(f"Error in scalping strategy: {str(e)}")
-        return None
-
-# SuperTrend策略
-def check_supertrend_strategy(df):
-    try:
-        # 计算ATR
-        df['tr'] = pd.DataFrame({
-            'hl': df['high'] - df['low'],
-            'hc': abs(df['high'] - df['close'].shift(1)),
-            'lc': abs(df['low'] - df['close'].shift(1))
-        }).max(axis=1)
-        df['atr'] = df['tr'].rolling(window=10).mean()
-        
-        # 计算SuperTrend
-        df['upperband'] = ((df['high'] + df['low']) / 2) + (2 * df['atr'])
-        df['lowerband'] = ((df['high'] + df['low']) / 2) - (2 * df['atr'])
-        
-        # 初始化SuperTrend
-        df['in_uptrend'] = True
-        for i in range(1, len(df)):
-            current_close = df['close'].iloc[i]
-            prev_close = df['close'].iloc[i-1]
-            
-            if current_close > df['upperband'].iloc[i-1]:
-                df.loc[df.index[i], 'in_uptrend'] = True
-            elif current_close < df['lowerband'].iloc[i-1]:
-                df.loc[df.index[i], 'in_uptrend'] = False
-            else:
-                df.loc[df.index[i], 'in_uptrend'] = df['in_uptrend'].iloc[i-1]
-                
-                if df['in_uptrend'].iloc[i] and df['lowerband'].iloc[i] < df['lowerband'].iloc[i-1]:
-                    df.loc[df.index[i], 'lowerband'] = df['lowerband'].iloc[i-1]
-                    
-                if not df['in_uptrend'].iloc[i] and df['upperband'].iloc[i] > df['upperband'].iloc[i-1]:
-                    df.loc[df.index[i], 'upperband'] = df['upperband'].iloc[i-1]
-        
-        # 获取最新趋势
-        current_trend = df['in_uptrend'].iloc[-1]
-        prev_trend = df['in_uptrend'].iloc[-2]
-        
-        # 判断交易信号
-        if current_trend and not prev_trend:
-            return 'BUY'
-        elif not current_trend and prev_trend:
-            return 'SELL'
-        return None
-    except Exception as e:
-        logger.error(f"Error in supertrend strategy: {str(e)}")
-        return None
-
-# RSI策略
-def check_rsi_strategy(df):
-    try:
-        # 计算RSI
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['rsi'] = 100 - (100 / (1 + rs))
-        
-        # 获取最新RSI值
-        current_rsi = df['rsi'].iloc[-1]
-        
-        # 判断交易信号
-        if current_rsi < 30:
-            return 'BUY'
-        elif current_rsi > 70:
-            return 'SELL'
-        return None
-    except Exception as e:
-        logger.error(f"Error in RSI strategy: {str(e)}")
-        return None
-
-# 布林带策略
-def check_bollinger_bands_strategy(df):
-    try:
-        # 计算布林带
-        df['sma'] = df['close'].rolling(window=20).mean()
-        df['std'] = df['close'].rolling(window=20).std()
-        df['upper_band'] = df['sma'] + (df['std'] * 2)
-        df['lower_band'] = df['sma'] - (df['std'] * 2)
-        
-        # 获取最新数据
-        current_price = df['close'].iloc[-1]
-        upper_band = df['upper_band'].iloc[-1]
-        lower_band = df['lower_band'].iloc[-1]
-        
-        # 判断交易信号
-        if current_price < lower_band:
-            return 'BUY'
-        elif current_price > upper_band:
-            return 'SELL'
-        return None
-    except Exception as e:
-        logger.error(f"Error in Bollinger Bands strategy: {str(e)}")
-        return None
+        logger.error(f"Error getting chart data: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取图表数据失败",
+            status_code=500
+        )
 
 # 添加保存策略设置的API路由
 @app.route('/api/save-strategy-settings', methods=['POST'])
@@ -1554,30 +629,6 @@ def not_found_error(error):
         'message': str(error)
     }), 404
 
-# 添加获取交易历史的API
-@app.route('/api/trades')
-def get_trades():
-    try:
-        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(50).all()
-        return jsonify({
-            'success': True,
-            'trades': [{
-                'exchange': trade.exchange,
-                'symbol': trade.symbol,
-                'side': trade.side,
-                'price': trade.price,
-                'quantity': trade.quantity,
-                'timestamp': trade.timestamp.isoformat(),
-                'status': trade.status
-            } for trade in trades]
-        })
-    except Exception as e:
-        logger.error(f"Error getting trades: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
 def check_api_keys():
     try:
         # 检查是否有活跃的API密钥
@@ -1620,8 +671,642 @@ def before_first_request():
     check_api_keys()
 
 # 修改交易执行函数
-def execute_trade(exchange, symbol, side, quantity, price, strategy=None, strategy_params=None):
+def execute_trade(exchange, symbol, side, quantity, price, strategy=None, strategy_params=None, bot_id=None):
+    """执行交易"""
     try:
+        # 获取账户信息
+        account_info = get_account_balance(exchange)
+        if not account_info:
+            raise Exception("Failed to get account information")
+            
+        # 分析市场状态
+        market_state = analyze_market_conditions(symbol)
+        if not market_state:
+            raise Exception("Failed to analyze market conditions")
+            
+        # 选择最优策略
+        if not strategy:
+            strategy = select_optimal_strategy(market_state, account_info)
+            if not strategy:
+                raise Exception("Failed to select optimal strategy")
+                
+        # 计算最优仓位
+        position_info = calculate_optimal_position_size(account_info, market_state, strategy)
+        if not position_info:
+            raise Exception("Failed to calculate optimal position size")
+            
+        # 更新交易参数
+        quantity = position_info['position_size'] / price
+        strategy_params = {
+            'leverage': position_info['leverage'],
+            'stop_loss': position_info['stop_loss'],
+            'take_profit': position_info['take_profit'],
+            'market_state': market_state,
+            'strategy': strategy
+        }
+        
+        # 确定交易方向（做多/做空）
+        position_type = 'LONG' if side == 'BUY' else 'SHORT'
+        
+        # 创建交易记录
+        trade = TradeHistory(
+            bot_id=bot_id,
+            exchange=exchange,
+            symbol=symbol,
+            side=side,
+            position_type=position_type,
+            price=price,
+            quantity=quantity,
+            status='OPEN',
+            strategy=strategy,
+            strategy_params=json.dumps(strategy_params)
+        )
+        db.session.add(trade)
+        db.session.commit()
+        
+        # 记录日志
+        strategy_name = STRATEGY_NAMES.get(strategy, '手动')
+        bot_name = TradingBotConfig.query.get(bot_id).name if bot_id else '手动'
+        logger.info(f"执行{bot_name}的{strategy_name}交易: {exchange} {symbol} {position_type} {quantity}@{price}")
+        logger.info(f"交易参数: {strategy_params}")
+        
+        return trade
+        
+    except Exception as e:
+        logger.error(f"执行交易失败: {str(e)}")
+        db.session.rollback()
+        return None
+
+# 路由：策略日志页面
+@app.route('/strategy-logs')
+def strategy_logs():
+    try:
+        return render_template('strategy_logs.html')
+    except Exception as e:
+        logger.error(f"Error loading strategy logs page: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+# API路由：获取策略日志
+@app.route('/api/strategy-logs')
+def get_strategy_logs():
+    try:
+        # 从交易历史中获取策略相关的交易记录
+        trades = TradeHistory.query.filter(
+            TradeHistory.strategy.isnot(None)
+        ).order_by(TradeHistory.timestamp.desc()).limit(100).all()
+        
+        logs = []
+        for trade in trades:
+            logs.append({
+                'timestamp': trade.timestamp.isoformat(),
+                'strategy': trade.strategy,
+                'symbol': trade.symbol,
+                'signal': trade.side,  # BUY 或 SELL
+                'price': trade.price,
+                'quantity': trade.quantity,
+                'status': trade.status,
+                'strategy_params': trade.strategy_params
+            })
+        
+        return jsonify({
+            'success': True,
+            'logs': logs
+        })
+    except Exception as e:
+        logger.error(f"Error getting strategy logs: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+def get_account_balance(exchange='Binance'):
+    """获取账户余额和持仓信息"""
+    try:
+        if exchange == 'Binance':
+            client = get_binance_client()
+            # 获取合约账户信息
+            futures_account = client.futures_account()
+            
+            # 计算总权益和未实现盈亏
+            total_balance = float(futures_account['totalWalletBalance'])
+            unrealized_pnl = float(futures_account['totalUnrealizedProfit'])
+            
+            # 获取持仓信息
+            positions = []
+            for position in futures_account['positions']:
+                if float(position['positionAmt']) != 0:  # 只显示有持仓的
+                    positions.append({
+                        'symbol': position['symbol'],
+                        'amount': float(position['positionAmt']),
+                        'entry_price': float(position['entryPrice']),
+                        'mark_price': float(position['markPrice']),
+                        'unrealized_pnl': float(position['unRealizedProfit']),
+                        'leverage': float(position['leverage']),
+                        'side': 'LONG' if float(position['positionAmt']) > 0 else 'SHORT'
+                    })
+            
+            return {
+                'total_balance': total_balance,
+                'unrealized_pnl': unrealized_pnl,
+                'positions': positions
+            }
+            
+        elif exchange == 'LBank':
+            api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
+            if not api_key:
+                raise Exception("No active LBank API key found")
+                
+            timestamp = str(int(time.time() * 1000))
+            params = {
+                'api_key': api_key.api_key,
+                'timestamp': timestamp
+            }
+            sign = generate_lbank_sign(params, api_key.api_secret)
+            params['sign'] = sign
+            
+            # 获取合约账户信息
+            response = requests.get('https://api.lbank.info/v2/user/contract_account', params=params)
+            if response.status_code != 200:
+                raise Exception("Failed to fetch LBank data")
+                
+            data = response.json()
+            if not data['result']:
+                raise Exception("Failed to get LBank account data")
+                
+            account_data = data['data']
+            
+            # 获取持仓信息
+            positions_response = requests.get('https://api.lbank.info/v2/user/contract_position', params=params)
+            positions_data = positions_response.json()
+            
+            positions = []
+            if positions_data['result']:
+                for position in positions_data['data']:
+                    if float(position['amount']) != 0:  # 只显示有持仓的
+                        positions.append({
+                            'symbol': position['symbol'],
+                            'amount': float(position['amount']),
+                            'entry_price': float(position['entry_price']),
+                            'mark_price': float(position['mark_price']),
+                            'unrealized_pnl': float(position['unrealized_pnl']),
+                            'leverage': float(position['leverage']),
+                            'side': 'LONG' if position['side'] == 'buy' else 'SHORT'
+                        })
+            
+            return jsonify({
+                'total_balance': float(account_data['total_balance']),
+                'unrealized_pnl': float(account_data['unrealized_pnl']),
+                'positions': positions
+            })
+                
+    except Exception as e:
+        logger.error(f"Error getting account balance: {str(e)}")
+        return None
+
+def analyze_market_conditions(symbol, timeframe='1m'):
+    """分析市场条件，返回市场状态和波动性"""
+    try:
+        # 获取K线数据
+        klines = get_cached_klines(symbol, timeframe, int(time.time() / 60))
+        if not klines:
+            return None
+            
+        df = pd.DataFrame(klines)
+        
+        # 计算技术指标
+        # 1. 计算波动率
+        df['returns'] = df['close'].pct_change()
+        volatility = df['returns'].std() * 100  # 转换为百分比
+        
+        # 2. 计算趋势强度
+        df['sma20'] = df['close'].rolling(window=20).mean()
+        df['sma50'] = df['close'].rolling(window=50).mean()
+        trend_strength = abs((df['sma20'].iloc[-1] - df['sma50'].iloc[-1]) / df['sma50'].iloc[-1] * 100)
+        
+        # 3. 计算成交量趋势
+        df['volume_sma'] = df['volume'].rolling(window=20).mean()
+        volume_trend = df['volume'].iloc[-1] / df['volume_sma'].iloc[-1]
+        
+        # 4. 计算市场状态
+        market_state = {
+            'volatility': volatility,
+            'trend_strength': trend_strength,
+            'volume_trend': volume_trend,
+            'is_trending': trend_strength > 1.0,  # 趋势强度大于1%认为是趋势市场
+            'is_volatile': volatility > 1.0,  # 波动率大于1%认为是高波动市场
+            'is_high_volume': volume_trend > 1.2  # 成交量大于20日均量认为是高成交量
+        }
+        
+        return market_state
+        
+    except Exception as e:
+        logger.error(f"Error analyzing market conditions: {str(e)}")
+        return None
+
+def select_optimal_strategy(market_state, account_info):
+    """根据市场状态和账户信息选择最优策略"""
+    try:
+        # 获取当前启用的策略
+        enabled_strategies = []
+        if os.getenv('SCALPING_ENABLED', 'false').lower() == 'true':
+            enabled_strategies.append('scalping')
+        if os.getenv('SUPERTREND_ENABLED', 'false').lower() == 'true':
+            enabled_strategies.append('supertrend')
+        if os.getenv('RSI_ENABLED', 'false').lower() == 'true':
+            enabled_strategies.append('rsi')
+        if os.getenv('BB_ENABLED', 'false').lower() == 'true':
+            enabled_strategies.append('bollinger_bands')
+            
+        if not enabled_strategies:
+            return None
+            
+        # 根据市场状态选择策略
+        if market_state['is_trending']:
+            # 趋势市场优先使用趋势策略
+            if 'supertrend' in enabled_strategies:
+                return 'supertrend'
+            elif 'bollinger_bands' in enabled_strategies:
+                return 'bollinger_bands'
+        elif market_state['is_volatile']:
+            # 高波动市场优先使用网格策略
+            if 'scalping' in enabled_strategies:
+                return 'scalping'
+        elif market_state['is_high_volume']:
+            # 高成交量市场可以使用RSI策略
+            if 'rsi' in enabled_strategies:
+                return 'rsi'
+                
+        # 默认返回第一个启用的策略
+        return enabled_strategies[0]
+        
+    except Exception as e:
+        logger.error(f"Error selecting optimal strategy: {str(e)}")
+        return None
+
+def calculate_optimal_position_size(account_info, market_state, strategy):
+    """计算最优仓位大小"""
+    try:
+        total_balance = account_info['total_balance']
+        unrealized_pnl = account_info['unrealized_pnl']
+        current_positions = account_info['positions']
+        
+        # 计算当前总持仓价值
+        total_position_value = sum(abs(pos['amount'] * pos['mark_price']) for pos in current_positions)
+        
+        # 基础风险参数
+        max_risk_per_trade = 0.02  # 单笔交易最大风险（总资金的2%）
+        max_total_risk = 0.1  # 总持仓最大风险（总资金的10%）
+        min_position_size = 10  # 最小仓位（USDT）
+        max_position_size = total_balance * 0.5  # 最大仓位（总资金的50%）
+        
+        # 根据市场状态调整风险参数
+        if market_state['is_volatile']:
+            max_risk_per_trade *= 0.8  # 高波动市场降低风险
+        elif market_state['is_trending']:
+            max_risk_per_trade *= 1.2  # 趋势市场可以适当提高风险
+            
+        # 根据策略调整风险参数
+        if strategy == 'scalping':
+            max_risk_per_trade *= 0.8  # 网格策略降低风险
+        elif strategy == 'supertrend':
+            max_risk_per_trade *= 1.2  # 趋势策略可以适当提高风险
+            
+        # 计算可用风险额度
+        available_risk = total_balance * max_total_risk - total_position_value
+        
+        # 如果可用风险额度小于最小仓位，返回None
+        if available_risk < min_position_size:
+            logger.warning(f"Available risk ({available_risk} USDT) is less than minimum position size ({min_position_size} USDT)")
+            return None
+            
+        # 计算建议仓位大小
+        suggested_position = min(
+            max(min_position_size, total_balance * max_risk_per_trade),  # 单笔交易风险限制
+            max_position_size,  # 最大仓位限制
+            available_risk  # 可用风险额度限制
+        )
+        
+        return {
+            'position_size': suggested_position,
+            'leverage': calculate_optimal_leverage(market_state, strategy),
+            'stop_loss': calculate_stop_loss(market_state, strategy),
+            'take_profit': calculate_take_profit(market_state, strategy)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating optimal position size: {str(e)}")
+        return None
+
+def calculate_optimal_leverage(market_state, strategy):
+    """计算最优杠杆倍数"""
+    try:
+        # 基础杠杆倍数
+        base_leverage = 10
+        
+        # 根据市场状态调整杠杆
+        if market_state['is_volatile']:
+            base_leverage *= 0.8  # 高波动市场降低杠杆
+        elif market_state['is_trending']:
+            base_leverage *= 1.2  # 趋势市场可以适当提高杠杆
+            
+        # 根据策略调整杠杆
+        if strategy == 'scalping':
+            base_leverage *= 0.8  # 网格策略降低杠杆
+        elif strategy == 'supertrend':
+            base_leverage *= 1.2  # 趋势策略可以适当提高杠杆
+            
+        # 确保杠杆在合理范围内
+        return max(1, min(20, base_leverage))
+        
+    except Exception as e:
+        logger.error(f"Error calculating optimal leverage: {str(e)}")
+        return 10  # 默认返回10倍杠杆
+
+def calculate_stop_loss(market_state, strategy):
+    """计算止损价格"""
+    try:
+        # 基础止损比例
+        base_stop_loss = 0.02  # 2%
+        
+        # 根据市场状态调整止损
+        if market_state['is_volatile']:
+            base_stop_loss *= 1.2  # 高波动市场扩大止损
+        elif market_state['is_trending']:
+            base_stop_loss *= 0.8  # 趋势市场收紧止损
+            
+        # 根据策略调整止损
+        if strategy == 'scalping':
+            base_stop_loss *= 0.8  # 网格策略收紧止损
+        elif strategy == 'supertrend':
+            base_stop_loss *= 1.2  # 趋势策略扩大止损
+            
+        return base_stop_loss
+        
+    except Exception as e:
+        logger.error(f"Error calculating stop loss: {str(e)}")
+        return 0.02  # 默认返回2%止损
+
+def calculate_take_profit(market_state, strategy):
+    """计算止盈价格"""
+    try:
+        # 基础止盈比例
+        base_take_profit = 0.04  # 4%
+        
+        # 根据市场状态调整止盈
+        if market_state['is_volatile']:
+            base_take_profit *= 1.2  # 高波动市场扩大止盈
+        elif market_state['is_trending']:
+            base_take_profit *= 1.5  # 趋势市场大幅提高止盈
+            
+        # 根据策略调整止盈
+        if strategy == 'scalping':
+            base_take_profit *= 0.8  # 网格策略收紧止盈
+        elif strategy == 'supertrend':
+            base_take_profit *= 1.5  # 趋势策略扩大止盈
+            
+        return base_take_profit
+        
+    except Exception as e:
+        logger.error(f"Error calculating take profit: {str(e)}")
+        return 0.04  # 默认返回4%止盈
+
+def check_high_frequency_strategy(df, timeframe='1m'):
+    """高频交易策略"""
+    try:
+        # 计算技术指标
+        # 1. 计算EMA
+        df['ema9'] = df['close'].ewm(span=9, adjust=False).mean()
+        df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
+        df['ema50'] = df['close'].ewm(span=50, adjust=False).mean()
+        
+        # 2. 计算MACD
+        df['macd'] = df['ema9'] - df['ema21']
+        df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+        df['hist'] = df['macd'] - df['signal']
+        
+        # 3. 计算RSI
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['rsi'] = 100 - (100 / (1 + rs))
+        
+        # 4. 计算布林带
+        df['sma20'] = df['close'].rolling(window=20).mean()
+        df['std20'] = df['close'].rolling(window=20).std()
+        df['upper_band'] = df['sma20'] + (df['std20'] * 2)
+        df['lower_band'] = df['sma20'] - (df['std20'] * 2)
+        
+        # 5. 计算成交量指标
+        df['volume_sma'] = df['volume'].rolling(window=20).mean()
+        df['volume_ratio'] = df['volume'] / df['volume_sma']
+        
+        # 获取最新数据
+        current_price = df['close'].iloc[-1]
+        prev_price = df['close'].iloc[-2]
+        
+        # 交易信号逻辑
+        signals = []
+        
+        # 1. EMA交叉信号
+        if df['ema9'].iloc[-1] > df['ema21'].iloc[-1] and df['ema9'].iloc[-2] <= df['ema21'].iloc[-2]:
+            signals.append('BUY')
+        elif df['ema9'].iloc[-1] < df['ema21'].iloc[-1] and df['ema9'].iloc[-2] >= df['ema21'].iloc[-2]:
+            signals.append('SELL')
+            
+        # 2. MACD信号
+        if df['hist'].iloc[-1] > 0 and df['hist'].iloc[-2] <= 0:
+            signals.append('BUY')
+        elif df['hist'].iloc[-1] < 0 and df['hist'].iloc[-2] >= 0:
+            signals.append('SELL')
+            
+        # 3. RSI超买超卖信号
+        if df['rsi'].iloc[-1] < 30:
+            signals.append('BUY')
+        elif df['rsi'].iloc[-1] > 70:
+            signals.append('SELL')
+            
+        # 4. 布林带突破信号
+        if current_price < df['lower_band'].iloc[-1]:
+            signals.append('BUY')
+        elif current_price > df['upper_band'].iloc[-1]:
+            signals.append('SELL')
+            
+        # 5. 成交量确认
+        volume_confirmed = df['volume_ratio'].iloc[-1] > 1.5
+        
+        # 综合信号判断
+        if len(signals) >= 2 and volume_confirmed:  # 至少两个指标同时确认
+            # 计算信号强度
+            buy_signals = signals.count('BUY')
+            sell_signals = signals.count('SELL')
+            
+            if buy_signals > sell_signals:
+                return {
+                    'signal': 'BUY',
+                    'strength': buy_signals / len(signals),
+                    'indicators': {
+                        'ema_cross': df['ema9'].iloc[-1] > df['ema21'].iloc[-1],
+                        'macd_signal': df['hist'].iloc[-1] > 0,
+                        'rsi_signal': df['rsi'].iloc[-1] < 30,
+                        'bb_signal': current_price < df['lower_band'].iloc[-1],
+                        'volume_confirmed': volume_confirmed
+                    }
+                }
+            elif sell_signals > buy_signals:
+                return {
+                    'signal': 'SELL',
+                    'strength': sell_signals / len(signals),
+                    'indicators': {
+                        'ema_cross': df['ema9'].iloc[-1] < df['ema21'].iloc[-1],
+                        'macd_signal': df['hist'].iloc[-1] < 0,
+                        'rsi_signal': df['rsi'].iloc[-1] > 70,
+                        'bb_signal': current_price > df['upper_band'].iloc[-1],
+                        'volume_confirmed': volume_confirmed
+                    }
+                }
+                
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error in high frequency strategy: {str(e)}")
+        return None
+
+def calculate_high_frequency_position_size(account_info, market_state, strategy_signal):
+    """计算高频交易仓位大小"""
+    try:
+        total_balance = account_info['total_balance']
+        unrealized_pnl = account_info['unrealized_pnl']
+        current_positions = account_info['positions']
+        
+        # 计算当前总持仓价值
+        total_position_value = sum(abs(pos['amount'] * pos['mark_price']) for pos in current_positions)
+        
+        # 基础风险参数
+        base_risk = 0.02  # 基础风险2%
+        
+        # 根据信号强度调整风险
+        signal_strength = strategy_signal.get('strength', 0.5)
+        adjusted_risk = base_risk * signal_strength
+        
+        # 根据市场状态调整风险
+        if market_state['is_volatile']:
+            adjusted_risk *= 0.8  # 高波动市场降低风险
+        elif market_state['is_trending']:
+            adjusted_risk *= 1.2  # 趋势市场提高风险
+            
+        # 计算仓位大小
+        position_size = total_balance * adjusted_risk
+        
+        # 设置最小和最大仓位限制
+        min_position = 10  # 最小10 USDT
+        max_position = total_balance * 0.5  # 最大50%资金
+        
+        # 确保仓位在合理范围内
+        position_size = max(min_position, min(position_size, max_position))
+        
+        # 计算杠杆倍数
+        leverage = calculate_high_frequency_leverage(market_state, strategy_signal)
+        
+        return {
+            'position_size': position_size,
+            'leverage': leverage,
+            'stop_loss': calculate_high_frequency_stop_loss(market_state, strategy_signal),
+            'take_profit': calculate_high_frequency_take_profit(market_state, strategy_signal)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating high frequency position size: {str(e)}")
+        return None
+
+def calculate_high_frequency_leverage(market_state, strategy_signal):
+    """计算高频交易杠杆倍数"""
+    try:
+        # 基础杠杆
+        base_leverage = 20  # 高频交易使用更高杠杆
+        
+        # 根据信号强度调整杠杆
+        signal_strength = strategy_signal.get('strength', 0.5)
+        adjusted_leverage = base_leverage * signal_strength
+        
+        # 根据市场状态调整杠杆
+        if market_state['is_volatile']:
+            adjusted_leverage *= 0.8
+        elif market_state['is_trending']:
+            adjusted_leverage *= 1.2
+            
+        # 确保杠杆在合理范围内
+        return max(1, min(50, adjusted_leverage))
+        
+    except Exception as e:
+        logger.error(f"Error calculating high frequency leverage: {str(e)}")
+        return 20
+
+def calculate_high_frequency_stop_loss(market_state, strategy_signal):
+    """计算高频交易止损价格"""
+    try:
+        # 基础止损
+        base_stop_loss = 0.01  # 1%
+        
+        # 根据信号强度调整止损
+        signal_strength = strategy_signal.get('strength', 0.5)
+        adjusted_stop_loss = base_stop_loss * (1 / signal_strength)
+        
+        # 根据市场状态调整止损
+        if market_state['is_volatile']:
+            adjusted_stop_loss *= 1.2
+        elif market_state['is_trending']:
+            adjusted_stop_loss *= 0.8
+            
+        return adjusted_stop_loss
+        
+    except Exception as e:
+        logger.error(f"Error calculating high frequency stop loss: {str(e)}")
+        return 0.01
+
+def calculate_high_frequency_take_profit(market_state, strategy_signal):
+    """计算高频交易止盈价格"""
+    try:
+        # 基础止盈
+        base_take_profit = 0.02  # 2%
+        
+        # 根据信号强度调整止盈
+        signal_strength = strategy_signal.get('strength', 0.5)
+        adjusted_take_profit = base_take_profit * signal_strength
+        
+        # 根据市场状态调整止盈
+        if market_state['is_volatile']:
+            adjusted_take_profit *= 1.2
+        elif market_state['is_trending']:
+            adjusted_take_profit *= 1.5
+            
+        return adjusted_take_profit
+        
+    except Exception as e:
+        logger.error(f"Error calculating high frequency take profit: {str(e)}")
+        return 0.02
+
+def execute_high_frequency_trade(exchange, symbol, side, quantity, price, strategy_signal=None):
+    """执行高频交易"""
+    try:
+        # 获取账户信息
+        account_info = get_account_balance(exchange)
+        if not account_info:
+            raise Exception("Failed to get account information")
+            
+        # 分析市场状态
+        market_state = analyze_market_conditions(symbol)
+        if not market_state:
+            raise Exception("Failed to analyze market conditions")
+            
+        # 计算仓位大小
+        position_info = calculate_high_frequency_position_size(account_info, market_state, strategy_signal)
+        if not position_info:
+            raise Exception("Failed to calculate position size")
+            
+        # 更新交易参数
+        quantity = position_info['position_size'] / price
+        
         # 创建交易记录
         trade = TradeHistory(
             exchange=exchange,
@@ -1630,21 +1315,576 @@ def execute_trade(exchange, symbol, side, quantity, price, strategy=None, strate
             price=price,
             quantity=quantity,
             status='OPEN',
-            strategy=strategy,
-            strategy_params=json.dumps(strategy_params) if strategy_params else None
+            strategy='high_frequency',
+            strategy_params=json.dumps({
+                'leverage': position_info['leverage'],
+                'stop_loss': position_info['stop_loss'],
+                'take_profit': position_info['take_profit'],
+                'market_state': market_state,
+                'strategy_signal': strategy_signal
+            })
         )
         db.session.add(trade)
         db.session.commit()
         
         # 记录日志
-        strategy_name = STRATEGY_NAMES.get(strategy, '手动') if strategy else '手动'
-        logger.info(f"执行{strategy_name}交易: {exchange} {symbol} {side} {quantity}@{price}")
+        logger.info(f"执行高频交易: {exchange} {symbol} {side} {quantity}@{price}")
+        logger.info(f"交易参数: {position_info}")
         
         return trade
+        
     except Exception as e:
-        logger.error(f"执行交易失败: {str(e)}")
+        logger.error(f"执行高频交易失败: {str(e)}")
         db.session.rollback()
         return None
+
+@app.route('/high-frequency')
+def high_frequency():
+    try:
+        # 获取当前设置
+        settings = {
+            'trading_pair': os.getenv('TRADING_PAIR', 'BTCUSDT'),
+            'leverage': os.getenv('LEVERAGE', '20'),
+            'min_position': os.getenv('MIN_POSITION', '10'),
+            'max_position': os.getenv('MAX_POSITION', '1000'),
+            'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '1'),
+            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '2'),
+            'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '1000')
+        }
+        
+        # 获取最近的交易记录
+        trades = TradeHistory.query.filter_by(strategy='high_frequency').order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        
+        return render_template('high_frequency.html', settings=settings, trades=trades)
+    except Exception as e:
+        logger.error(f"Error loading high frequency page: {str(e)}")
+        return render_template('error.html', error="加载高频交易页面时出错")
+
+@app.route('/api/high-frequency/start', methods=['POST'])
+@handle_errors
+@log_request
+@validate_params('exchange', 'trading_pair', 'leverage', 'quantity')
+def start_high_frequency_trading():
+    try:
+        # 获取当前选择的交易所
+        exchange = request.json.get('exchange', os.getenv('CURRENT_EXCHANGE', 'binance'))
+        
+        # 根据选择的交易所初始化API客户端
+        if exchange == 'binance':
+            api_key = os.getenv('BINANCE_API_KEY')
+            api_secret = os.getenv('BINANCE_API_SECRET')
+        else:  # lbank
+            api_key = os.getenv('LBANK_API_KEY')
+            api_secret = os.getenv('LBANK_API_SECRET')
+            
+        if not all([api_key, api_secret]):
+            return api_response(
+                success=False,
+                error="API密钥未配置",
+                message="请先配置API密钥",
+                status_code=400
+            )
+            
+        # 启动高频交易
+        success = start_high_frequency_trading_process(exchange)
+        if success:
+            return api_response(
+                message="高频交易已启动"
+            )
+        else:
+            return api_response(
+                success=False,
+                error="启动失败",
+                message="无法启动高频交易",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error starting high frequency trading: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="启动高频交易失败",
+            status_code=500
+        )
+
+@app.route('/api/high-frequency/stop', methods=['POST'])
+@handle_errors
+@log_request
+def stop_high_frequency_trading():
+    try:
+        success = stop_high_frequency_trading_process()
+        if success:
+            return api_response(
+                message="高频交易已停止"
+            )
+        else:
+            return api_response(
+                success=False,
+                error="停止失败",
+                message="无法停止高频交易",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error stopping high frequency trading: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="停止高频交易失败",
+            status_code=500
+        )
+
+@app.route('/api/high-frequency/status')
+@handle_errors
+@log_request
+def get_high_frequency_status():
+    try:
+        status = get_high_frequency_trading_status()
+        return api_response(
+            data=status
+        )
+    except Exception as e:
+        logger.error(f"Error getting high frequency status: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取高频交易状态失败",
+            status_code=500
+        )
+
+@app.route('/api/high-frequency/trade', methods=['POST'])
+@handle_errors
+@log_request
+@validate_params('exchange', 'symbol', 'side', 'quantity', 'price', 'strategy_signal')
+def execute_high_frequency_trade_api():
+    try:
+        data = request.json
+        if not data:
+            return api_response(
+                success=False,
+                error="无效的请求数据",
+                message="请提供有效的JSON数据",
+                status_code=400
+            )
+            
+        exchange = data.get('exchange', os.getenv('CURRENT_EXCHANGE', 'Binance'))
+        symbol = data.get('symbol', os.getenv('TRADING_PAIR', 'BTCUSDT'))
+        side = data.get('side')
+        quantity = data.get('quantity')
+        price = data.get('price')
+        strategy_signal = data.get('strategy_signal')
+        
+        if not all([exchange, symbol, side, quantity, price]):
+            return api_response(
+                success=False,
+                error="缺少必要参数",
+                message="请提供所有必要的交易参数",
+                status_code=400
+            )
+            
+        # 执行高频交易
+        trade = execute_high_frequency_trade(exchange, symbol, side, quantity, price, strategy_signal)
+        
+        if trade:
+            return api_response(
+                data={
+                    'trade': {
+                        'id': trade.id,
+                        'exchange': trade.exchange,
+                        'symbol': trade.symbol,
+                        'side': trade.side,
+                        'price': trade.price,
+                        'quantity': trade.quantity,
+                        'timestamp': trade.timestamp.isoformat(),
+                        'status': trade.status,
+                        'strategy': trade.strategy,
+                        'strategy_params': trade.strategy_params
+                    }
+                }
+            )
+        else:
+            return api_response(
+                success=False,
+                error="交易执行失败",
+                message="无法执行高频交易",
+                status_code=500
+            )
+    except Exception as e:
+        logger.error(f"Error executing high frequency trade: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="执行高频交易失败",
+            status_code=500
+        )
+
+# 添加机器人配置相关的API
+@app.route('/api/trading-bots', methods=['GET'])
+@handle_errors
+@log_request
+def get_trading_bots():
+    try:
+        db = get_db()
+        bots = db.execute('''
+            SELECT id, name, exchange, trading_pair, status, strategies, funds,
+                   leverage, stop_loss, take_profit, max_daily_trades, performance
+            FROM trading_bots
+        ''').fetchall()
+        
+        return api_response(
+            data={
+                'bots': [{
+                    'id': bot['id'],
+                    'name': bot['name'],
+                    'exchange': bot['exchange'],
+                    'trading_pair': bot['trading_pair'],
+                    'status': bot['status'],
+                    'strategies': json.loads(bot['strategies']),
+                    'funds': bot['funds'],
+                    'leverage': bot['leverage'],
+                    'stop_loss': bot['stop_loss'],
+                    'take_profit': bot['take_profit'],
+                    'max_daily_trades': bot['max_daily_trades'],
+                    'performance': json.loads(bot['performance']) if bot['performance'] else None
+                } for bot in bots]
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting trading bots: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取交易机器人列表失败",
+            status_code=500
+        )
+
+@app.route('/api/trading-bots', methods=['POST'])
+@handle_errors
+@log_request
+@validate_params('name', 'exchange', 'trading_pair', 'strategies', 'funds', 'leverage', 'stop_loss', 'take_profit', 'max_daily_trades')
+def create_trading_bot():
+    try:
+        data = request.json
+        
+        # 验证数据
+        if not validate_bot_data(data):
+            return api_response(
+                success=False,
+                error="无效的机器人参数",
+                message="请检查机器人参数是否正确",
+                status_code=400
+            )
+        
+        # 保存到数据库
+        db = get_db()
+        db.execute('''
+            INSERT INTO trading_bots (
+                name, exchange, trading_pair, status, strategies, funds,
+                leverage, stop_loss, take_profit, max_daily_trades
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data['name'],
+            data['exchange'],
+            data['trading_pair'],
+            'STOPPED',
+            json.dumps(data['strategies']),
+            data['funds'],
+            data['leverage'],
+            data['stop_loss'],
+            data['take_profit'],
+            data['max_daily_trades']
+        ))
+        db.commit()
+        
+        return api_response(
+            message="交易机器人创建成功"
+        )
+    except Exception as e:
+        logger.error(f"Error creating trading bot: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="创建交易机器人失败",
+            status_code=500
+        )
+
+@app.route('/api/trading-bots/<int:bot_id>', methods=['GET'])
+def get_trading_bot(bot_id):
+    try:
+        db = get_db()
+        bot = db.execute('''
+            SELECT id, name, exchange, trading_pair, status, strategies, funds,
+                   leverage, stop_loss, take_profit, max_daily_trades, performance
+            FROM trading_bots
+            WHERE id = ?
+        ''', (bot_id,)).fetchone()
+        
+        if not bot:
+            return jsonify({'success': False, 'error': '机器人不存在'})
+        
+        return jsonify({
+            'success': True,
+            'bot': {
+                'id': bot['id'],
+                'name': bot['name'],
+                'exchange': bot['exchange'],
+                'trading_pair': bot['trading_pair'],
+                'status': bot['status'],
+                'strategies': json.loads(bot['strategies']),
+                'funds': bot['funds'],
+                'leverage': bot['leverage'],
+                'stop_loss': bot['stop_loss'],
+                'take_profit': bot['take_profit'],
+                'max_daily_trades': bot['max_daily_trades'],
+                'performance': json.loads(bot['performance']) if bot['performance'] else None
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/trading-bots/<int:bot_id>', methods=['PUT'])
+def update_trading_bot(bot_id):
+    try:
+        data = request.json
+        
+        # 验证数据
+        if not validate_bot_data(data):
+            return jsonify({'success': False, 'error': '无效的机器人参数'})
+        
+        # 检查机器人是否存在
+        db = get_db()
+        bot = db.execute('SELECT id FROM trading_bots WHERE id = ?', (bot_id,)).fetchone()
+        if not bot:
+            return jsonify({'success': False, 'error': '机器人不存在'})
+        
+        # 更新数据库
+        db.execute('''
+            UPDATE trading_bots
+            SET name = ?, exchange = ?, trading_pair = ?, strategies = ?,
+                funds = ?, leverage = ?, stop_loss = ?, take_profit = ?,
+                max_daily_trades = ?
+            WHERE id = ?
+        ''', (
+            data['name'],
+            data['exchange'],
+            data['trading_pair'],
+            json.dumps(data['strategies']),
+            data['funds'],
+            data['leverage'],
+            data['stop_loss'],
+            data['take_profit'],
+            data['max_daily_trades'],
+            bot_id
+        ))
+        db.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/trading-bots/<int:bot_id>', methods=['DELETE'])
+def delete_trading_bot(bot_id):
+    try:
+        db = get_db()
+        
+        # 检查机器人是否存在
+        bot = db.execute('SELECT id, status FROM trading_bots WHERE id = ?', (bot_id,)).fetchone()
+        if not bot:
+            return jsonify({'success': False, 'error': '机器人不存在'})
+        
+        # 检查机器人是否在运行
+        if bot['status'] == 'RUNNING':
+            return jsonify({'success': False, 'error': '请先停止机器人'})
+        
+        # 删除机器人
+        db.execute('DELETE FROM trading_bots WHERE id = ?', (bot_id,))
+        db.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+def validate_bot_data(data):
+    """验证机器人参数是否有效"""
+    required_fields = [
+        'name', 'exchange', 'trading_pair', 'funds', 'leverage',
+        'stop_loss', 'take_profit', 'max_daily_trades', 'strategies'
+    ]
+    
+    # 检查必需字段
+    if not all(field in data for field in required_fields):
+        return False
+    
+    # 检查数值范围
+    if not (100 <= data['funds'] <= 1000000):
+        return False
+    if not (1 <= data['leverage'] <= 50):
+        return False
+    if not (0.1 <= data['stop_loss'] <= 5):
+        return False
+    if not (0.1 <= data['take_profit'] <= 10):
+        return False
+    if not (10 <= data['max_daily_trades'] <= 1000):
+        return False
+    
+    # 检查策略设置
+    if not isinstance(data['strategies'], dict):
+        return False
+    
+    # 检查是否至少启用了一个策略
+    enabled_strategies = [s for s in data['strategies'].values() if s.get('enabled')]
+    if not enabled_strategies:
+        return False
+    
+    return True
+
+# 初始化机器人管理器
+bot_manager = TradingBotManager()
+
+@app.route('/api/bot/start/<int:bot_id>', methods=['POST'])
+@handle_errors
+@log_request
+def start_bot(bot_id):
+    """启动交易机器人"""
+    try:
+        success = bot_manager.start_bot(bot_id)
+        if success:
+            return api_response(
+                message="机器人启动成功"
+            )
+        else:
+            return api_response(
+                success=False,
+                error="启动失败",
+                message="无法启动机器人",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error starting bot {bot_id}: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="启动机器人失败",
+            status_code=500
+        )
+
+@app.route('/api/bot/stop/<int:bot_id>', methods=['POST'])
+@handle_errors
+@log_request
+def stop_bot(bot_id):
+    """停止交易机器人"""
+    try:
+        success = bot_manager.stop_bot(bot_id)
+        if success:
+            return api_response(
+                message="机器人停止成功"
+            )
+        else:
+            return api_response(
+                success=False,
+                error="停止失败",
+                message="无法停止机器人",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error stopping bot {bot_id}: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="停止机器人失败",
+            status_code=500
+        )
+
+@app.route('/api/bot/performance/<int:bot_id>')
+@handle_errors
+@log_request
+def get_bot_performance(bot_id):
+    """获取机器人性能统计"""
+    try:
+        performance = bot_manager.get_bot_performance(bot_id)
+        if performance:
+            return api_response(
+                data=performance
+            )
+        else:
+            return api_response(
+                success=False,
+                error="获取性能数据失败",
+                message="无法获取机器人性能数据",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error getting performance for bot {bot_id}: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取性能数据失败",
+            status_code=500
+        )
+
+@app.route('/api/bot/status/<int:bot_id>')
+def get_bot_status(bot_id):
+    """获取机器人状态"""
+    try:
+        bot = TradingBotConfig.query.get(bot_id)
+        if not bot:
+            return jsonify({'status': 'error', 'message': 'Bot not found'}), 404
+            
+        performance = bot_manager.get_bot_performance(bot_id)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'id': bot.id,
+                'name': bot.name,
+                'exchange': bot.exchange,
+                'trading_pair': bot.trading_pair,
+                'status': bot.status,
+                'strategies': bot.strategies,
+                'funds': bot.funds,
+                'performance': performance
+            }
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/high-frequency/settings', methods=['POST'])
+def update_high_frequency_settings():
+    try:
+        settings = request.json
+        
+        # 验证设置
+        if not validate_settings(settings):
+            return jsonify({'success': False, 'error': '无效的设置参数'})
+        
+        # 保存设置到数据库
+        db = get_db()
+        db.execute('''
+            INSERT OR REPLACE INTO high_frequency_settings (
+                exchange, trading_pair, leverage, stop_loss, take_profit,
+                max_daily_trades, total_funds, strategies
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            settings['exchange'],
+            settings['trading_pair'],
+            settings['leverage'],
+            settings['stop_loss'],
+            settings['take_profit'],
+            settings['max_daily_trades'],
+            settings['total_funds'],
+            json.dumps(settings['strategies'])
+        ))
+        db.commit()
+        
+        # 保存设置到配置文件
+        with open('strategy_config.json', 'w') as f:
+            json.dump(settings, f, indent=4)
+        
+        # 更新环境变量
+        os.environ['CURRENT_EXCHANGE'] = settings['exchange']
+        
+        return jsonify({'success': True, 'message': '设置已更新'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     # 修改为监听本地地址，让 Nginx 处理外部请求

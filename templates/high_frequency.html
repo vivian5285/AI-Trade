@@ -1,0 +1,573 @@
+{% extends "base.html" %}
+
+{% block title %}高频交易{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- 交易状态 -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">交易状态</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>当前信号</h6>
+                        <div id="current-signal" class="alert alert-info">等待信号...</div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>市场状态</h6>
+                        <div id="market-state" class="alert alert-secondary">加载中...</div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>账户信息</h6>
+                        <div id="account-info" class="alert alert-secondary">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 交易设置 -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">交易设置</h5>
+                </div>
+                <div class="card-body">
+                    <form id="settings-form">
+                        <!-- 交易所设置 -->
+                        <div class="mb-3">
+                            <h6>交易所设置</h6>
+                            <div class="mb-2">
+                                <label for="exchange" class="form-label">选择交易所</label>
+                                <select class="form-select" id="exchange">
+                                    <option value="binance">Binance</option>
+                                    <option value="lbank">LBank</option>
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label for="trading-pair" class="form-label">交易对</label>
+                                <select class="form-select" id="trading-pair">
+                                    <option value="BTCUSDT">BTC/USDT</option>
+                                    <option value="ETHUSDT">ETH/USDT</option>
+                                    <option value="BNBUSDT">BNB/USDT</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 策略设置 -->
+                        <div class="mb-3">
+                            <h6>策略设置</h6>
+                            <div class="mb-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="scalping-enabled" checked>
+                                    <label class="form-check-label" for="scalping-enabled">网格策略</label>
+                                </div>
+                                <div id="scalping-settings" class="ms-4 mt-2">
+                                    <div class="mb-2">
+                                        <label for="grid-count" class="form-label">网格数量</label>
+                                        <input type="number" class="form-control" id="grid-count" value="10" min="5" max="50">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="grid-spacing" class="form-label">网格间距 (%)</label>
+                                        <input type="number" class="form-control" id="grid-spacing" value="0.5" min="0.1" max="2" step="0.1">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="supertrend-enabled" checked>
+                                    <label class="form-check-label" for="supertrend-enabled">超级趋势策略</label>
+                                </div>
+                                <div id="supertrend-settings" class="ms-4 mt-2">
+                                    <div class="mb-2">
+                                        <label for="atr-period" class="form-label">ATR周期</label>
+                                        <input type="number" class="form-control" id="atr-period" value="10" min="5" max="30">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="atr-multiplier" class="form-label">ATR乘数</label>
+                                        <input type="number" class="form-control" id="atr-multiplier" value="3" min="1" max="5" step="0.1">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="rsi-enabled" checked>
+                                    <label class="form-check-label" for="rsi-enabled">RSI策略</label>
+                                </div>
+                                <div id="rsi-settings" class="ms-4 mt-2">
+                                    <div class="mb-2">
+                                        <label for="rsi-period" class="form-label">RSI周期</label>
+                                        <input type="number" class="form-control" id="rsi-period" value="14" min="5" max="30">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="rsi-overbought" class="form-label">超买阈值</label>
+                                        <input type="number" class="form-control" id="rsi-overbought" value="70" min="60" max="90">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="rsi-oversold" class="form-label">超卖阈值</label>
+                                        <input type="number" class="form-control" id="rsi-oversold" value="30" min="10" max="40">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="bb-enabled" checked>
+                                    <label class="form-check-label" for="bb-enabled">布林带策略</label>
+                                </div>
+                                <div id="bb-settings" class="ms-4 mt-2">
+                                    <div class="mb-2">
+                                        <label for="bb-period" class="form-label">布林带周期</label>
+                                        <input type="number" class="form-control" id="bb-period" value="20" min="10" max="50">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="bb-std" class="form-label">标准差倍数</label>
+                                        <input type="number" class="form-control" id="bb-std" value="2" min="1" max="3" step="0.1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 资金分配设置 -->
+                        <div class="mb-3">
+                            <h6>资金分配</h6>
+                            <div class="mb-2">
+                                <label for="total-funds" class="form-label">总资金 (USDT)</label>
+                                <input type="number" class="form-control" id="total-funds" value="1000" min="100" step="100">
+                            </div>
+                            <div class="mb-2">
+                                <label for="scalping-funds" class="form-label">网格策略资金比例 (%)</label>
+                                <input type="range" class="form-range" id="scalping-funds" min="0" max="100" value="30">
+                                <div class="d-flex justify-content-between">
+                                    <small>0%</small>
+                                    <small id="scalping-funds-value">30%</small>
+                                    <small>100%</small>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label for="supertrend-funds" class="form-label">超级趋势策略资金比例 (%)</label>
+                                <input type="range" class="form-range" id="supertrend-funds" min="0" max="100" value="30">
+                                <div class="d-flex justify-content-between">
+                                    <small>0%</small>
+                                    <small id="supertrend-funds-value">30%</small>
+                                    <small>100%</small>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label for="rsi-funds" class="form-label">RSI策略资金比例 (%)</label>
+                                <input type="range" class="form-range" id="rsi-funds" min="0" max="100" value="20">
+                                <div class="d-flex justify-content-between">
+                                    <small>0%</small>
+                                    <small id="rsi-funds-value">20%</small>
+                                    <small>100%</small>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label for="bb-funds" class="form-label">布林带策略资金比例 (%)</label>
+                                <input type="range" class="form-range" id="bb-funds" min="0" max="100" value="20">
+                                <div class="d-flex justify-content-between">
+                                    <small>0%</small>
+                                    <small id="bb-funds-value">20%</small>
+                                    <small>100%</small>
+                                </div>
+                            </div>
+                            <div class="alert alert-info" id="funds-summary">
+                                资金分配: 网格(300 USDT), 超级趋势(300 USDT), RSI(200 USDT), 布林带(200 USDT)
+                            </div>
+                        </div>
+
+                        <!-- 风险控制设置 -->
+                        <div class="mb-3">
+                            <h6>风险控制</h6>
+                            <div class="mb-2">
+                                <label for="leverage" class="form-label">杠杆倍数</label>
+                                <input type="number" class="form-control" id="leverage" value="10" min="1" max="50">
+                            </div>
+                            <div class="mb-2">
+                                <label for="stop-loss" class="form-label">止损比例 (%)</label>
+                                <input type="number" class="form-control" id="stop-loss" value="1" min="0.1" max="5" step="0.1">
+                            </div>
+                            <div class="mb-2">
+                                <label for="take-profit" class="form-label">止盈比例 (%)</label>
+                                <input type="number" class="form-control" id="take-profit" value="2" min="0.1" max="10" step="0.1">
+                            </div>
+                            <div class="mb-2">
+                                <label for="max-daily-trades" class="form-label">每日最大交易次数</label>
+                                <input type="number" class="form-control" id="max-daily-trades" value="100" min="10" max="1000">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">保存设置</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 最近交易 -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">最近交易</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>策略</th>
+                                    <th>方向</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>状态</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-trades">
+                                {% for trade in trades %}
+                                <tr>
+                                    <td>{{ trade.timestamp.strftime('%H:%M:%S') }}</td>
+                                    <td>{{ trade.strategy }}</td>
+                                    <td class="{% if trade.side == 'BUY' %}text-success{% else %}text-danger{% endif %}">
+                                        {{ trade.side }}
+                                    </td>
+                                    <td>{{ "%.2f"|format(trade.price) }}</td>
+                                    <td>{{ "%.4f"|format(trade.quantity) }}</td>
+                                    <td>{{ trade.status }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">机器人状态</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>名称</th>
+                                    <th>交易所</th>
+                                    <th>交易对</th>
+                                    <th>状态</th>
+                                    <th>策略</th>
+                                    <th>资金</th>
+                                    <th>总交易次数</th>
+                                    <th>胜率</th>
+                                    <th>总盈亏</th>
+                                    <th>当日盈亏</th>
+                                    <th>最大回撤</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="botStatusTable">
+                                <!-- 机器人状态将通过JavaScript动态更新 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 更新资金分配显示
+function updateFundsAllocation() {
+    const totalFunds = parseFloat(document.getElementById('total-funds').value);
+    const scalpingPercent = parseInt(document.getElementById('scalping-funds').value);
+    const supertrendPercent = parseInt(document.getElementById('supertrend-funds').value);
+    const rsiPercent = parseInt(document.getElementById('rsi-funds').value);
+    const bbPercent = parseInt(document.getElementById('bb-funds').value);
+
+    // 更新百分比显示
+    document.getElementById('scalping-funds-value').textContent = scalpingPercent + '%';
+    document.getElementById('supertrend-funds-value').textContent = supertrendPercent + '%';
+    document.getElementById('rsi-funds-value').textContent = rsiPercent + '%';
+    document.getElementById('bb-funds-value').textContent = bbPercent + '%';
+
+    // 计算各策略资金
+    const scalpingFunds = (totalFunds * scalpingPercent / 100).toFixed(1);
+    const supertrendFunds = (totalFunds * supertrendPercent / 100).toFixed(1);
+    const rsiFunds = (totalFunds * rsiPercent / 100).toFixed(1);
+    const bbFunds = (totalFunds * bbPercent / 100).toFixed(1);
+
+    // 更新资金分配摘要
+    document.getElementById('funds-summary').textContent = 
+        `资金分配: 网格(${scalpingFunds} USDT), 超级趋势(${supertrendFunds} USDT), RSI(${rsiFunds} USDT), 布林带(${bbFunds} USDT)`;
+}
+
+// 监听资金分配变化
+document.getElementById('total-funds').addEventListener('input', updateFundsAllocation);
+document.getElementById('scalping-funds').addEventListener('input', updateFundsAllocation);
+document.getElementById('supertrend-funds').addEventListener('input', updateFundsAllocation);
+document.getElementById('rsi-funds').addEventListener('input', updateFundsAllocation);
+document.getElementById('bb-funds').addEventListener('input', updateFundsAllocation);
+
+// 策略设置显示/隐藏
+function toggleStrategySettings(strategyId, enabled) {
+    const settingsDiv = document.getElementById(`${strategyId}-settings`);
+    if (settingsDiv) {
+        settingsDiv.style.display = enabled ? 'block' : 'none';
+    }
+}
+
+// 监听策略启用状态变化
+document.getElementById('scalping-enabled').addEventListener('change', function(e) {
+    toggleStrategySettings('scalping', e.target.checked);
+});
+document.getElementById('supertrend-enabled').addEventListener('change', function(e) {
+    toggleStrategySettings('supertrend', e.target.checked);
+});
+document.getElementById('rsi-enabled').addEventListener('change', function(e) {
+    toggleStrategySettings('rsi', e.target.checked);
+});
+document.getElementById('bb-enabled').addEventListener('change', function(e) {
+    toggleStrategySettings('bb', e.target.checked);
+});
+
+// 保存设置
+document.getElementById('settings-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const settings = {
+        exchange: document.getElementById('exchange').value,
+        trading_pair: document.getElementById('trading-pair').value,
+        leverage: parseInt(document.getElementById('leverage').value),
+        stop_loss: parseFloat(document.getElementById('stop-loss').value),
+        take_profit: parseFloat(document.getElementById('take-profit').value),
+        max_daily_trades: parseInt(document.getElementById('max-daily-trades').value),
+        total_funds: parseFloat(document.getElementById('total-funds').value),
+        strategies: {
+            scalping: {
+                enabled: document.getElementById('scalping-enabled').checked,
+                grid_count: parseInt(document.getElementById('grid-count').value),
+                grid_spacing: parseFloat(document.getElementById('grid-spacing').value),
+                funds_percent: parseInt(document.getElementById('scalping-funds').value)
+            },
+            supertrend: {
+                enabled: document.getElementById('supertrend-enabled').checked,
+                atr_period: parseInt(document.getElementById('atr-period').value),
+                atr_multiplier: parseFloat(document.getElementById('atr-multiplier').value),
+                funds_percent: parseInt(document.getElementById('supertrend-funds').value)
+            },
+            rsi: {
+                enabled: document.getElementById('rsi-enabled').checked,
+                period: parseInt(document.getElementById('rsi-period').value),
+                overbought: parseInt(document.getElementById('rsi-overbought').value),
+                oversold: parseInt(document.getElementById('rsi-oversold').value),
+                funds_percent: parseInt(document.getElementById('rsi-funds').value)
+            },
+            bollinger_bands: {
+                enabled: document.getElementById('bb-enabled').checked,
+                period: parseInt(document.getElementById('bb-period').value),
+                std_dev: parseFloat(document.getElementById('bb-std').value),
+                funds_percent: parseInt(document.getElementById('bb-funds').value)
+            }
+        }
+    };
+    
+    fetch('/api/high-frequency/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', '设置已保存');
+        } else {
+            showAlert('danger', '保存失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving settings:', error);
+        showAlert('danger', '保存失败');
+    });
+});
+
+// 更新交易状态
+function updateStatus() {
+    fetch('/api/high-frequency/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const status = data.status;
+                
+                // 更新信号
+                const signalDiv = document.getElementById('current-signal');
+                if (status.signal) {
+                    const signalClass = status.signal.signal === 'BUY' ? 'alert-success' : 'alert-danger';
+                    signalDiv.className = `alert ${signalClass}`;
+                    signalDiv.textContent = `${status.signal.signal} (强度: ${(status.signal.strength * 100).toFixed(1)}%)`;
+                } else {
+                    signalDiv.className = 'alert alert-info';
+                    signalDiv.textContent = '等待信号...';
+                }
+                
+                // 更新市场状态
+                const marketStateDiv = document.getElementById('market-state');
+                if (status.market_state) {
+                    const state = status.market_state;
+                    marketStateDiv.innerHTML = `
+                        波动率: ${state.volatility.toFixed(2)}%<br>
+                        趋势强度: ${state.trend_strength.toFixed(2)}%<br>
+                        成交量趋势: ${state.volume_trend.toFixed(2)}x
+                    `;
+                }
+                
+                // 更新账户信息
+                const accountInfoDiv = document.getElementById('account-info');
+                if (status.account_info) {
+                    const account = status.account_info;
+                    accountInfoDiv.innerHTML = `
+                        总权益: ${account.total_balance.toFixed(2)} USDT<br>
+                        未实现盈亏: ${account.unrealized_pnl.toFixed(2)} USDT<br>
+                        持仓数量: ${account.positions.length}
+                    `;
+                }
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+// 更新机器人状态
+function updateBotStatus() {
+    fetch('/api/trading-bots')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const botStatusTable = document.getElementById('botStatusTable');
+                botStatusTable.innerHTML = '';
+                
+                data.bots.forEach(bot => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${bot.name}</td>
+                        <td>${bot.exchange}</td>
+                        <td>${bot.trading_pair}</td>
+                        <td>
+                            <span class="badge ${bot.status === 'RUNNING' ? 'bg-success' : 'bg-danger'}">
+                                ${bot.status}
+                            </span>
+                        </td>
+                        <td>${bot.strategies.join(', ')}</td>
+                        <td>${bot.funds} USDT</td>
+                        <td>${bot.performance?.total_trades || 0}</td>
+                        <td>${(bot.performance?.win_rate * 100 || 0).toFixed(2)}%</td>
+                        <td class="${bot.performance?.total_profit >= 0 ? 'text-success' : 'text-danger'}">
+                            ${bot.performance?.total_profit?.toFixed(2) || 0} USDT
+                        </td>
+                        <td class="${bot.performance?.daily_profit >= 0 ? 'text-success' : 'text-danger'}">
+                            ${bot.performance?.daily_profit?.toFixed(2) || 0} USDT
+                        </td>
+                        <td>${(bot.performance?.max_drawdown * 100 || 0).toFixed(2)}%</td>
+                        <td>
+                            <button class="btn btn-sm ${bot.status === 'RUNNING' ? 'btn-danger' : 'btn-success'}"
+                                    onclick="${bot.status === 'RUNNING' ? 'stopBot' : 'startBot'}(${bot.id})">
+                                ${bot.status === 'RUNNING' ? '停止' : '启动'}
+                            </button>
+                        </td>
+                    `;
+                    botStatusTable.appendChild(row);
+                });
+            }
+        })
+        .catch(error => console.error('Error updating bot status:', error));
+}
+
+// 启动机器人
+function startBot(botId) {
+    fetch(`/api/bot/start/${botId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showAlert('success', '机器人启动成功');
+            updateBotStatus();
+        } else {
+            showAlert('danger', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error starting bot:', error);
+        showAlert('danger', '启动机器人失败');
+    });
+}
+
+// 停止机器人
+function stopBot(botId) {
+    fetch(`/api/bot/stop/${botId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showAlert('success', '机器人停止成功');
+            updateBotStatus();
+        } else {
+            showAlert('danger', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error stopping bot:', error);
+        showAlert('danger', '停止机器人失败');
+    });
+}
+
+// 显示提示信息
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.row'));
+    setTimeout(() => alertDiv.remove(), 5000);
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化资金分配显示
+    updateFundsAllocation();
+    
+    // 初始化策略设置显示
+    toggleStrategySettings('scalping', document.getElementById('scalping-enabled').checked);
+    toggleStrategySettings('supertrend', document.getElementById('supertrend-enabled').checked);
+    toggleStrategySettings('rsi', document.getElementById('rsi-enabled').checked);
+    toggleStrategySettings('bb', document.getElementById('bb-enabled').checked);
+    
+    // 定期更新状态
+    setInterval(updateStatus, 1000);  // 每秒更新一次
+    setInterval(updateBotStatus, 5000);  // 每5秒更新一次机器人状态
+    
+    // 立即更新一次
+    updateStatus();
+    updateBotStatus();
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block title %}交易机器人管理{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>交易机器人管理</h2>
+        <a href="{{ url_for('create_trading_bot') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> 创建机器人
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        {% for bot in bots %}
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ bot.name }}</h5>
+                    <span class="badge {% if bot.status == 'RUNNING' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ bot.status }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>交易所:</strong> {{ bot.exchange }}</p>
+                            <p><strong>交易对:</strong> {{ bot.trading_pair }}</p>
+                            <p><strong>分配资金:</strong> {{ bot.funds }} USDT</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>K线周期:</strong> {{ bot.kline_period }}</p>
+                            <p><strong>杠杆倍数:</strong> {{ bot.leverage }}x</p>
+                            <p><strong>每日最大交易:</strong> {{ bot.max_daily_trades }}</p>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <p><strong>策略列表:</strong></p>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for strategy in bot.strategies|from_json %}
+                            <span class="badge bg-info">{{ strategy }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            {% if bot.status == 'STOPPED' %}
+                            <form action="{{ url_for('start_trading_bot', bot_id=bot.id) }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-play"></i> 启动
+                                </button>
+                            </form>
+                            {% else %}
+                            <form action="{{ url_for('stop_trading_bot', bot_id=bot.id) }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="fas fa-stop"></i> 停止
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        <form action="{{ url_for('delete_trading_bot', bot_id=bot.id) }}" method="POST" class="d-inline"
+                              onsubmit="return confirm('确定要删除这个交易机器人吗？');">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash"></i> 删除
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card-footer text-muted">
+                    创建时间: {{ bot.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 策略设置显示/隐藏
+function toggleStrategySettings(strategyId, enabled) {
+    const settingsDiv = document.getElementById(`${strategyId}Settings`);
+    if (settingsDiv) {
+        settingsDiv.style.display = enabled ? 'block' : 'none';
+    }
+}
+
+// 监听策略启用状态变化
+document.querySelectorAll('.strategy-check').forEach(checkbox => {
+    checkbox.addEventListener('change', function(e) {
+        const strategyId = e.target.value;
+        toggleStrategySettings(strategyId, e.target.checked);
+    });
+});
+
+// 获取表单数据
+function getFormData() {
+    const strategies = {};
+    
+    // 获取选中的策略
+    document.querySelectorAll('.strategy-check:checked').forEach(checkbox => {
+        const strategyId = checkbox.value;
+        strategies[strategyId] = {
+            enabled: true
+        };
+        
+        // 获取策略特定参数
+        switch(strategyId) {
+            case 'scalping':
+                strategies[strategyId].grid_count = parseInt(document.getElementById('gridCount').value);
+                strategies[strategyId].grid_spacing = parseFloat(document.getElementById('gridSpacing').value);
+                break;
+            case 'supertrend':
+                strategies[strategyId].atr_period = parseInt(document.getElementById('atrPeriod').value);
+                strategies[strategyId].atr_multiplier = parseFloat(document.getElementById('atrMultiplier').value);
+                break;
+            case 'rsi':
+                strategies[strategyId].period = parseInt(document.getElementById('rsiPeriod').value);
+                strategies[strategyId].overbought = parseInt(document.getElementById('rsiOverbought').value);
+                strategies[strategyId].oversold = parseInt(document.getElementById('rsiOversold').value);
+                break;
+            case 'bollinger_bands':
+                strategies[strategyId].period = parseInt(document.getElementById('bbPeriod').value);
+                strategies[strategyId].std_dev = parseFloat(document.getElementById('bbStd').value);
+                break;
+        }
+    });
+    
+    return {
+        id: document.getElementById('botId').value || null,
+        name: document.getElementById('botName').value,
+        exchange: document.getElementById('exchange').value,
+        trading_pair: document.getElementById('tradingPair').value,
+        funds: parseFloat(document.getElementById('funds').value),
+        leverage: parseInt(document.getElementById('leverage').value),
+        stop_loss: parseFloat(document.getElementById('stopLoss').value),
+        take_profit: parseFloat(document.getElementById('takeProfit').value),
+        max_daily_trades: parseInt(document.getElementById('maxDailyTrades').value),
+        strategies: strategies
+    };
+}
+
+// 填充表单数据
+function fillFormData(bot) {
+    document.getElementById('botId').value = bot.id;
+    document.getElementById('botName').value = bot.name;
+    document.getElementById('exchange').value = bot.exchange;
+    document.getElementById('tradingPair').value = bot.trading_pair;
+    document.getElementById('funds').value = bot.funds;
+    document.getElementById('leverage').value = bot.leverage;
+    document.getElementById('stopLoss').value = bot.stop_loss;
+    document.getElementById('takeProfit').value = bot.take_profit;
+    document.getElementById('maxDailyTrades').value = bot.max_daily_trades;
+    
+    // 设置策略
+    Object.entries(bot.strategies).forEach(([strategyId, settings]) => {
+        const checkbox = document.getElementById(`${strategyId}Enabled`);
+        if (checkbox) {
+            checkbox.checked = settings.enabled;
+            toggleStrategySettings(strategyId, settings.enabled);
+            
+            // 设置策略特定参数
+            switch(strategyId) {
+                case 'scalping':
+                    document.getElementById('gridCount').value = settings.grid_count;
+                    document.getElementById('gridSpacing').value = settings.grid_spacing;
+                    break;
+                case 'supertrend':
+                    document.getElementById('atrPeriod').value = settings.atr_period;
+                    document.getElementById('atrMultiplier').value = settings.atr_multiplier;
+                    break;
+                case 'rsi':
+                    document.getElementById('rsiPeriod').value = settings.period;
+                    document.getElementById('rsiOverbought').value = settings.overbought;
+                    document.getElementById('rsiOversold').value = settings.oversold;
+                    break;
+                case 'bollinger_bands':
+                    document.getElementById('bbPeriod').value = settings.period;
+                    document.getElementById('bbStd').value = settings.std_dev;
+                    break;
+            }
+        }
+    });
+}
+
+// 保存机器人
+document.getElementById('saveBot').addEventListener('click', function() {
+    const formData = getFormData();
+    const botId = formData.id;
+    const url = botId ? `/api/trading-bots/${botId}` : '/api/trading-bots';
+    const method = botId ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', '保存成功');
+            $('#createBotModal').modal('hide');
+            loadBots();
+        } else {
+            showAlert('danger', '保存失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '保存失败');
+    });
+});
+
+// 加载机器人列表
+function loadBots() {
+    fetch('/api/trading-bots')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const botList = document.getElementById('botList');
+                botList.innerHTML = '';
+                
+                data.bots.forEach(bot => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${bot.name}</td>
+                        <td>${bot.exchange}</td>
+                        <td>${bot.trading_pair}</td>
+                        <td>
+                            <span class="badge ${bot.status === 'RUNNING' ? 'bg-success' : 'bg-danger'}">
+                                ${bot.status}
+                            </span>
+                        </td>
+                        <td>${Object.keys(bot.strategies).join(', ')}</td>
+                        <td>${bot.funds} USDT</td>
+                        <td>${bot.leverage}x</td>
+                        <td>${bot.stop_loss}% / ${bot.take_profit}%</td>
+                        <td>${bot.performance?.total_trades || 0}</td>
+                        <td>${(bot.performance?.win_rate * 100 || 0).toFixed(2)}%</td>
+                        <td class="${bot.performance?.total_profit >= 0 ? 'text-success' : 'text-danger'}">
+                            ${bot.performance?.total_profit?.toFixed(2) || 0} USDT
+                        </td>
+                        <td class="${bot.performance?.daily_profit >= 0 ? 'text-success' : 'text-danger'}">
+                            ${bot.performance?.daily_profit?.toFixed(2) || 0} USDT
+                        </td>
+                        <td>${(bot.performance?.max_drawdown * 100 || 0).toFixed(2)}%</td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-primary" onclick="editBot(${bot.id})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm ${bot.status === 'RUNNING' ? 'btn-danger' : 'btn-success'}"
+                                        onclick="${bot.status === 'RUNNING' ? 'stopBot' : 'startBot'}(${bot.id})">
+                                    <i class="fas fa-${bot.status === 'RUNNING' ? 'stop' : 'play'}"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteBot(${bot.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    botList.appendChild(row);
+                });
+            }
+        })
+        .catch(error => console.error('Error loading bots:', error));
+}
+
+// 编辑机器人
+function editBot(botId) {
+    fetch(`/api/trading-bots/${botId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                fillFormData(data.bot);
+                $('#createBotModal').modal('show');
+            }
+        })
+        .catch(error => console.error('Error loading bot:', error));
+}
+
+// 删除机器人
+function deleteBot(botId) {
+    if (confirm('确定要删除这个机器人吗？')) {
+        fetch(`/api/trading-bots/${botId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', '删除成功');
+                loadBots();
+            } else {
+                showAlert('danger', '删除失败: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', '删除失败');
+        });
+    }
+}
+
+// 启动机器人
+function startBot(botId) {
+    fetch(`/api/bot/start/${botId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showAlert('success', '机器人启动成功');
+            loadBots();
+        } else {
+            showAlert('danger', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '启动失败');
+    });
+}
+
+// 停止机器人
+function stopBot(botId) {
+    fetch(`/api/bot/stop/${botId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            showAlert('success', '机器人停止成功');
+            loadBots();
+        } else {
+            showAlert('danger', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', '停止失败');
+    });
+}
+
+// 显示提示信息
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+    alertDiv.style.zIndex = '1050';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    document.body.appendChild(alertDiv);
+    setTimeout(() => alertDiv.remove(), 5000);
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', function() {
+    loadBots();
+    
+    // 清空表单
+    document.getElementById('createBotModal').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('botForm').reset();
+        document.getElementById('botId').value = '';
+        document.querySelectorAll('.strategy-check').forEach(checkbox => {
+            toggleStrategySettings(checkbox.value, false);
+        });
+    });
+});
+</script>
+{% endblock %} 

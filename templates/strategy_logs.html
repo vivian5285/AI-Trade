@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}策略日志 - AI Trading System{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">策略交易日志</h5>
+                    <div>
+                        <select id="strategy-filter" class="form-select form-select-sm" style="width: 150px;">
+                            <option value="all">所有策略</option>
+                            <option value="scalping">网格交易</option>
+                            <option value="supertrend">超级趋势</option>
+                            <option value="rsi">RSI策略</option>
+                            <option value="bollinger_bands">布林带策略</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>策略</th>
+                                    <th>交易对</th>
+                                    <th>信号</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>状态</th>
+                                    <th>参数</th>
+                                </tr>
+                            </thead>
+                            <tbody id="strategy-logs">
+                                <tr>
+                                    <td colspan="8" class="text-center">加载中...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function formatStrategyName(strategy) {
+    const strategyNames = {
+        'scalping': '网格交易',
+        'supertrend': '超级趋势',
+        'rsi': 'RSI策略',
+        'bollinger_bands': '布林带策略'
+    };
+    return strategyNames[strategy] || strategy;
+}
+
+function formatSignal(signal) {
+    if (signal === 'BUY') {
+        return '<span class="badge bg-success">做多</span>';
+    } else if (signal === 'SELL') {
+        return '<span class="badge bg-danger">做空</span>';
+    }
+    return signal;
+}
+
+function formatParams(params) {
+    if (!params) return '-';
+    try {
+        const parsed = JSON.parse(params);
+        return Object.entries(parsed)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join('<br>');
+    } catch (e) {
+        return params;
+    }
+}
+
+function updateStrategyLogs() {
+    const strategyFilter = document.getElementById('strategy-filter').value;
+    
+    fetch('/api/strategy-logs')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error fetching strategy logs:', data.error);
+                return;
+            }
+            
+            const logsTable = document.getElementById('strategy-logs');
+            const filteredLogs = strategyFilter === 'all' 
+                ? data.logs 
+                : data.logs.filter(log => log.strategy === strategyFilter);
+            
+            if (filteredLogs.length === 0) {
+                logsTable.innerHTML = '<tr><td colspan="8" class="text-center">暂无日志记录</td></tr>';
+                return;
+            }
+            
+            logsTable.innerHTML = filteredLogs.map(log => `
+                <tr>
+                    <td>${new Date(log.timestamp).toLocaleString()}</td>
+                    <td>${formatStrategyName(log.strategy)}</td>
+                    <td>${log.symbol}</td>
+                    <td>${formatSignal(log.signal)}</td>
+                    <td>$${parseFloat(log.price).toFixed(2)}</td>
+                    <td>${parseFloat(log.quantity).toFixed(4)}</td>
+                    <td>
+                        <span class="badge ${log.status === 'OPEN' ? 'bg-primary' : 'bg-success'}">
+                            ${log.status === 'OPEN' ? '持仓中' : '已平仓'}
+                        </span>
+                    </td>
+                    <td>${formatParams(log.strategy_params)}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('strategy-logs').innerHTML = 
+                '<tr><td colspan="8" class="text-center text-danger">加载失败</td></tr>';
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    updateStrategyLogs();
+    setInterval(updateStrategyLogs, 10000); // 每10秒刷新一次
+    
+    // 添加策略筛选事件监听
+    document.getElementById('strategy-filter').addEventListener('change', updateStrategyLogs);
+});
+</script>
+{% endblock %} 

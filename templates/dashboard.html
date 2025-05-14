@@ -11,17 +11,37 @@
                 <div class="card-body">
                     <h5 class="card-title">账户概览</h5>
                     <div class="row text-center">
-                        <div class="col-md-4 col-4 mb-2">
-                            <div class="text-muted">今日盈亏</div>
-                            <div id="daily-pnl" class="h5">加载中...</div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">总权益</h5>
+                                    <h3 id="total-balance">$0.00</h3>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-4 col-4 mb-2">
-                            <div class="text-muted">持仓数量</div>
-                            <div id="open-positions" class="h5">加载中...</div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">今日盈亏</h5>
+                                    <h3 id="daily-pnl">$0.00</h3>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-4 col-4 mb-2">
-                            <div class="text-muted">持仓价值</div>
-                            <div id="total-position" class="h5">加载中...</div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">未实现盈亏</h5>
+                                    <h3 id="unrealized-pnl">$0.00</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">持仓数量</h5>
+                                    <h3 id="position-count">0</h3>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -53,6 +73,35 @@
             </div>
         </div>
     </div>
+
+    <!-- 持仓列表 -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">当前持仓</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="positions-table">
+                    <thead>
+                        <tr>
+                            <th>交易对</th>
+                            <th>方向</th>
+                            <th>数量</th>
+                            <th>杠杆</th>
+                            <th>开仓价</th>
+                            <th>标记价</th>
+                            <th>未实现盈亏</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="7" class="text-center">暂无持仓</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -72,59 +121,67 @@ function updateAccountData() {
     setLoading('total-position', true);
 
     fetch('/api/account-data')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
             if (data.error) {
                 console.error('Error fetching account data:', data.error);
                 return;
             }
+            
+            // 更新总余额
+            document.getElementById('total-balance').textContent = 
+                `$${data.total_balance.toFixed(2)}`;
+            
             // 更新今日盈亏
-            const dailyPnl = document.getElementById('daily-pnl');
-            dailyPnl.textContent = `$${data.daily_pnl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            dailyPnl.className = data.daily_pnl >= 0 ? 'text-success' : 'text-danger';
+            const dailyPnlElement = document.getElementById('daily-pnl');
+            dailyPnlElement.textContent = `$${data.daily_pnl.toFixed(2)}`;
+            dailyPnlElement.className = data.daily_pnl >= 0 ? 'text-success' : 'text-danger';
+            
+            // 更新未实现盈亏
+            const unrealizedPnlElement = document.getElementById('unrealized-pnl');
+            unrealizedPnlElement.textContent = `$${data.unrealized_pnl.toFixed(2)}`;
+            unrealizedPnlElement.className = data.unrealized_pnl >= 0 ? 'text-success' : 'text-danger';
+            
             // 更新持仓数量
-            const openPositions = document.getElementById('open-positions');
-            openPositions.textContent = data.positions.length;
-            // 更新持仓价值
-            const totalPosition = document.getElementById('total-position');
-            const totalPositionValue = data.positions.reduce((sum, pos) => sum + pos.value, 0);
-            totalPosition.textContent = `$${totalPositionValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            // 更新持仓表格
-            updatePositionsTable(data.positions);
+            document.getElementById('position-count').textContent = 
+                data.positions.length;
+            
+            // 更新持仓列表
+            const positionsTable = document.getElementById('positions-table');
+            positionsTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>交易对</th>
+                        <th>方向</th>
+                        <th>数量</th>
+                        <th>杠杆</th>
+                        <th>开仓价</th>
+                        <th>标记价</th>
+                        <th>未实现盈亏</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.positions.map(position => `
+                        <tr>
+                            <td>${position.symbol}</td>
+                            <td class="${position.side === 'LONG' ? 'text-success' : 'text-danger'}">
+                                ${position.side}
+                            </td>
+                            <td>${Math.abs(position.amount).toFixed(4)}</td>
+                            <td>${position.leverage}x</td>
+                            <td>$${position.entry_price.toFixed(2)}</td>
+                            <td>$${position.mark_price.toFixed(2)}</td>
+                            <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
+                                $${position.unrealized_pnl.toFixed(2)}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
         })
         .catch(error => {
-            console.error('Error fetching account data:', error);
-            document.getElementById('daily-pnl').textContent = '加载失败';
-            document.getElementById('open-positions').textContent = '加载失败';
-            document.getElementById('total-position').textContent = '加载失败';
-            updatePositionsTable([]);
+            console.error('Error:', error);
         });
-}
-
-function updatePositionsTable(positions) {
-    const positionsTable = document.getElementById('positionsTable');
-    positionsTable.innerHTML = '';
-    if (!positions || positions.length === 0) {
-        const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="4" class="text-center">暂无持仓</td>';
-        positionsTable.appendChild(row);
-        return;
-    }
-    positions.forEach(position => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${position.asset}</td>
-            <td>${position.free.toFixed(8)}</td>
-            <td>${position.locked.toFixed(8)}</td>
-            <td>$${position.value.toFixed(2)}</td>
-        `;
-        positionsTable.appendChild(row);
-    });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
