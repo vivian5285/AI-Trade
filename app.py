@@ -1717,7 +1717,7 @@ def validate_bot_data(data):
     return True
 
 # 初始化机器人管理器
-bot_manager = trading_bot_manager()
+bot_manager = trading_bot_manager
 
 @app.route('/api/bot/start/<int:bot_id>', methods=['POST'])
 @handle_errors
