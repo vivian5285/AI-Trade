@@ -13,4 +13,4 @@ ccxt==4.1.87
 scipy==1.11.4
 matplotlib==3.8.2
 seaborn==0.13.0
-lbank-api==1.0.0 
+lbank-api 
