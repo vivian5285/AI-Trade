@@ -15,12 +15,12 @@
                     <div class="row">
                         <div class="col-6">
                             <h6>BTC/USDT</h6>
-                            <p id="btc-price">加载中...</p>
+                            <p id="btc-price" class="h4 mb-2">加载中...</p>
                             <p id="btc-change" class="text-muted">24h变化: 加载中...</p>
                         </div>
                         <div class="col-6">
                             <h6>ETH/USDT</h6>
-                            <p id="eth-price">加载中...</p>
+                            <p id="eth-price" class="h4 mb-2">加载中...</p>
                             <p id="eth-change" class="text-muted">24h变化: 加载中...</p>
                         </div>
                     </div>
@@ -80,6 +80,96 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 在交易机器人控制面板之前添加K线图表 -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">K线图表</h5>
+            <div class="d-flex align-items-center">
+                <select id="timeframe" class="form-select form-select-sm me-2" style="width: auto;">
+                    <option value="1m">1分钟</option>
+                    <option value="5m">5分钟</option>
+                    <option value="15m">15分钟</option>
+                    <option value="1h">1小时</option>
+                    <option value="4h">4小时</option>
+                    <option value="1d">1天</option>
+                </select>
+                <select id="symbol" class="form-select form-select-sm" style="width: auto;">
+                    <option value="BTCUSDT">BTC/USDT</option>
+                    <option value="ETHUSDT">ETH/USDT</option>
+                </select>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="kline-chart" style="height: 400px;"></div>
+        </div>
+    </div>
+
+    <!-- 在交易机器人控制面板之前添加策略参数配置 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">策略参数</h5>
+        </div>
+        <div class="card-body">
+            <form id="strategy-settings">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>RSI策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">RSI周期</label>
+                            <input type="number" class="form-control" name="rsi_period" value="14" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">超买阈值</label>
+                            <input type="number" class="form-control" name="rsi_overbought" value="70" min="50" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">超卖阈值</label>
+                            <input type="number" class="form-control" name="rsi_oversold" value="30" min="0" max="50">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>布林带策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">周期</label>
+                            <input type="number" class="form-control" name="bb_period" value="20" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">标准差倍数</label>
+                            <input type="number" class="form-control" name="bb_std" value="2" min="0.1" max="5" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6>SuperTrend策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">ATR周期</label>
+                            <input type="number" class="form-control" name="supertrend_atr_period" value="10" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">ATR倍数</label>
+                            <input type="number" class="form-control" name="supertrend_atr_multiplier" value="2" min="0.1" max="5" step="0.1">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>网格策略</h6>
+                        <div class="mb-3">
+                            <label class="form-label">网格数量</label>
+                            <input type="number" class="form-control" name="grid_count" value="10" min="1" max="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">网格间距(%)</label>
+                            <input type="number" class="form-control" name="grid_spacing" value="1" min="0.1" max="10" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                <div class="text-end mt-3">
+                    <button type="submit" class="btn btn-primary">保存设置</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -153,21 +243,167 @@
             </div>
         </div>
     </div>
+
+    <!-- 添加持仓详情卡片 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">持仓详情</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>交易所</th>
+                            <th>资产</th>
+                            <th>可用数量</th>
+                            <th>冻结数量</th>
+                            <th>当前价格</th>
+                            <th>持仓价值</th>
+                            <th>杠杆</th>
+                            <th>未实现盈亏</th>
+                            <th>强平价格</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positionsTable">
+                        <!-- 持仓数据将通过JavaScript动态填充 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+
 <script>
+// 初始化K线图表
+let chart = null;
+let candlestickSeries = null;
+
+function initChart() {
+    const chartContainer = document.getElementById('kline-chart');
+    chart = LightweightCharts.createChart(chartContainer, {
+        width: chartContainer.clientWidth,
+        height: 400,
+        layout: {
+            backgroundColor: '#ffffff',
+            textColor: '#333',
+        },
+        grid: {
+            vertLines: { color: '#f0f0f0' },
+            horzLines: { color: '#f0f0f0' },
+        },
+        timeScale: {
+            timeVisible: true,
+            secondsVisible: false,
+        },
+    });
+    
+    candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderVisible: false,
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+    });
+    
+    // 添加成交量图表
+    const volumeSeries = chart.addHistogramSeries({
+        color: '#26a69a',
+        priceFormat: {
+            type: 'volume',
+        },
+        priceScaleId: '',
+        scaleMargins: {
+            top: 0.8,
+            bottom: 0,
+        },
+    });
+    
+    // 响应式调整
+    window.addEventListener('resize', () => {
+        chart.applyOptions({
+            width: chartContainer.clientWidth
+        });
+    });
+}
+
+// 更新K线图表
+function updateKlineChart() {
+    const symbol = document.getElementById('symbol').value;
+    const timeframe = document.getElementById('timeframe').value;
+    
+    fetch(`/api/kline-data?symbol=${symbol}&timeframe=${timeframe}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const klines = data.data.map(k => ({
+                    time: new Date(k.timestamp).getTime() / 1000,
+                    open: parseFloat(k.open),
+                    high: parseFloat(k.high),
+                    low: parseFloat(k.low),
+                    close: parseFloat(k.close),
+                    volume: parseFloat(k.volume)
+                }));
+                
+                candlestickSeries.setData(klines);
+            }
+        })
+        .catch(error => console.error('Error updating kline chart:', error));
+}
+
+// 保存策略设置
+document.getElementById('strategy-settings').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const settings = {};
+    for (let [key, value] of formData.entries()) {
+        settings[key] = value;
+    }
+    
+    fetch('/api/save-strategy-settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('设置已保存');
+        } else {
+            alert('保存设置失败: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving settings:', error);
+        alert('保存设置失败');
+    });
+});
+
 // 更新市场数据
 function updateMarketData() {
     fetch('/api/market-data')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                document.getElementById('btc-price').textContent = data.btc.price;
-                document.getElementById('btc-change').textContent = data.btc.change;
-                document.getElementById('eth-price').textContent = data.eth.price;
-                document.getElementById('eth-change').textContent = data.eth.change;
+                // 更新BTC数据
+                const btcPrice = document.getElementById('btc-price');
+                const btcChange = document.getElementById('btc-change');
+                btcPrice.textContent = data.btc.price;
+                btcChange.textContent = `24h变化: ${data.btc.change}`;
+                btcChange.className = data.btc.change.startsWith('+') ? 'text-success' : 'text-danger';
+                
+                // 更新ETH数据
+                const ethPrice = document.getElementById('eth-price');
+                const ethChange = document.getElementById('eth-change');
+                ethPrice.textContent = data.eth.price;
+                ethChange.textContent = `24h变化: ${data.eth.change}`;
+                ethChange.className = data.eth.change.startsWith('+') ? 'text-success' : 'text-danger';
             } else {
                 console.error('Error fetching market data:', data.error);
             }
@@ -274,17 +510,61 @@ document.getElementById('restart-bot').addEventListener('click', function() {
         });
 });
 
-// 页面加载完成后开始更新数据
+// 更新持仓数据
+function updatePositionsData() {
+    fetch('/api/account-data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const positionsTable = document.getElementById('positionsTable');
+                positionsTable.innerHTML = '';
+                
+                if (data.positions && data.positions.length > 0) {
+                    data.positions.forEach(position => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${position.exchange}</td>
+                            <td>${position.asset}</td>
+                            <td>${position.free.toFixed(8)}</td>
+                            <td>${position.locked.toFixed(8)}</td>
+                            <td>$${position.price.toFixed(2)}</td>
+                            <td>$${position.value.toFixed(2)}</td>
+                            <td>${position.leverage ? position.leverage + 'x' : '-'}</td>
+                            <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
+                                ${position.unrealized_pnl ? '$' + position.unrealized_pnl.toFixed(2) : '-'}
+                            </td>
+                            <td>${position.liquidation_price ? '$' + position.liquidation_price.toFixed(2) : '-'}</td>
+                        `;
+                        positionsTable.appendChild(row);
+                    });
+                } else {
+                    positionsTable.innerHTML = '<tr><td colspan="9" class="text-center">暂无持仓</td></tr>';
+                }
+            }
+        })
+        .catch(error => console.error('Error updating positions data:', error));
+}
+
+// 在页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
-    // 立即更新一次数据
+    // 初始化图表
+    initChart();
+    
+    // 立即更新数据
     updateMarketData();
     updateAccountData();
+    updatePositionsData();
+    updateKlineChart();
     
-    // 每5秒更新一次市场数据
-    setInterval(updateMarketData, 5000);
+    // 设置定时更新
+    setInterval(updateMarketData, 5000);  // 每5秒更新市场数据
+    setInterval(updateAccountData, 10000);  // 每10秒更新账户数据
+    setInterval(updatePositionsData, 10000);  // 每10秒更新持仓数据
+    setInterval(updateKlineChart, 5000);  // 每5秒更新K线图表
     
-    // 每10秒更新一次账户数据
-    setInterval(updateAccountData, 10000);
+    // 监听时间周期和交易对选择变化
+    document.getElementById('timeframe').addEventListener('change', updateKlineChart);
+    document.getElementById('symbol').addEventListener('change', updateKlineChart);
     
     // 检查是否需要滚动到交易机器人部分
     if (window.location.hash === '#trading-bot') {
