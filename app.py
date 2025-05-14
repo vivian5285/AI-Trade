@@ -106,7 +106,106 @@ def trades():
 # 路由：设置
 @app.route('/settings')
 def settings():
-    return render_template('settings.html')
+    config = load_config()
+    return render_template('settings.html', settings=config['trading_settings'])
+
+# 路由：保存交易设置
+@app.route('/settings/trading', methods=['POST'])
+def save_trading_settings():
+    try:
+        # 更新环境变量
+        os.environ['TRADING_PAIR'] = request.form.get('trading_pair')
+        os.environ['LEVERAGE'] = request.form.get('leverage')
+        os.environ['QUANTITY'] = request.form.get('quantity')
+        os.environ['STOP_LOSS_PERCENTAGE'] = request.form.get('stop_loss')
+        os.environ['TAKE_PROFIT_PERCENTAGE'] = request.form.get('take_profit')
+        
+        # 更新.env文件
+        update_env_file({
+            'TRADING_PAIR': request.form.get('trading_pair'),
+            'LEVERAGE': request.form.get('leverage'),
+            'QUANTITY': request.form.get('quantity'),
+            'STOP_LOSS_PERCENTAGE': request.form.get('stop_loss'),
+            'TAKE_PROFIT_PERCENTAGE': request.form.get('take_profit')
+        })
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+# 路由：保存风险控制设置
+@app.route('/settings/risk', methods=['POST'])
+def save_risk_settings():
+    try:
+        # 更新环境变量
+        os.environ['MAX_DAILY_TRADES'] = request.form.get('max_daily_trades')
+        os.environ['MAX_DAILY_LOSS_PERCENTAGE'] = request.form.get('max_daily_loss')
+        os.environ['MIN_VOLUME_THRESHOLD'] = request.form.get('min_volume')
+        
+        # 更新.env文件
+        update_env_file({
+            'MAX_DAILY_TRADES': request.form.get('max_daily_trades'),
+            'MAX_DAILY_LOSS_PERCENTAGE': request.form.get('max_daily_loss'),
+            'MIN_VOLUME_THRESHOLD': request.form.get('min_volume')
+        })
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+# 路由：保存通知设置
+@app.route('/settings/notification', methods=['POST'])
+def save_notification_settings():
+    try:
+        # 更新环境变量
+        os.environ['NOTIFICATION_EMAIL'] = request.form.get('email')
+        os.environ['TELEGRAM_BOT_TOKEN'] = request.form.get('telegram')
+        os.environ['EMAIL_NOTIFICATIONS'] = 'true' if request.form.get('email_notifications') else 'false'
+        os.environ['TELEGRAM_NOTIFICATIONS'] = 'true' if request.form.get('telegram_notifications') else 'false'
+        
+        # 更新.env文件
+        update_env_file({
+            'NOTIFICATION_EMAIL': request.form.get('email'),
+            'TELEGRAM_BOT_TOKEN': request.form.get('telegram'),
+            'EMAIL_NOTIFICATIONS': 'true' if request.form.get('email_notifications') else 'false',
+            'TELEGRAM_NOTIFICATIONS': 'true' if request.form.get('telegram_notifications') else 'false'
+        })
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+def update_env_file(updates):
+    """更新.env文件"""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    
+    # 读取现有的.env文件
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            lines = f.readlines()
+    else:
+        lines = []
+    
+    # 更新或添加新的环境变量
+    new_lines = []
+    updated_keys = set()
+    
+    for line in lines:
+        key = line.split('=')[0].strip()
+        if key in updates:
+            new_lines.append(f"{key}={updates[key]}\n")
+            updated_keys.add(key)
+        else:
+            new_lines.append(line)
+    
+    # 添加新的环境变量
+    for key, value in updates.items():
+        if key not in updated_keys:
+            new_lines.append(f"{key}={value}\n")
+    
+    # 写入.env文件
+    with open(env_path, 'w') as f:
+        f.writelines(new_lines)
 
 # API密钥验证函数
 def validate_api_key(exchange, api_key, api_secret):
@@ -137,7 +236,14 @@ def load_config():
             'leverage': os.getenv('LEVERAGE', '50'),
             'quantity': os.getenv('QUANTITY', '0.2'),
             'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
-            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6')
+            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6'),
+            'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '200'),
+            'max_daily_loss': os.getenv('MAX_DAILY_LOSS_PERCENTAGE', '8'),
+            'min_volume': os.getenv('MIN_VOLUME_THRESHOLD', '1000000'),
+            'notification_email': os.getenv('NOTIFICATION_EMAIL', ''),
+            'telegram_bot_token': os.getenv('TELEGRAM_BOT_TOKEN', ''),
+            'email_notifications': os.getenv('EMAIL_NOTIFICATIONS', 'false').lower() == 'true',
+            'telegram_notifications': os.getenv('TELEGRAM_NOTIFICATIONS', 'false').lower() == 'true'
         }
     }
     return config
