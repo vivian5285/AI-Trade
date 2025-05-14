@@ -200,27 +200,27 @@ function updateMarketData() {
     fetch('/api/market-data')
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                // 更新BTC数据
-                const btcPrice = document.getElementById('btc-price');
-                const btcChange = document.getElementById('btc-change');
-                btcPrice.textContent = data.btc.price;
-                btcChange.textContent = `24h变化: ${data.btc.change}`;
-                btcChange.className = data.btc.change.startsWith('+') ? 'text-success' : 'text-danger';
-                
-                // 更新ETH数据
-                const ethPrice = document.getElementById('eth-price');
-                const ethChange = document.getElementById('eth-change');
-                ethPrice.textContent = data.eth.price;
-                ethChange.textContent = `24h变化: ${data.eth.change}`;
-                ethChange.className = data.eth.change.startsWith('+') ? 'text-success' : 'text-danger';
-            } else {
+            if (data.error) {
                 console.error('Error fetching market data:', data.error);
+                return;
+            }
+            
+            // 更新BTC数据
+            document.getElementById('btc-price').textContent = `$${data.btc.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById('btc-change').textContent = `${data.btc.change_24h.toFixed(2)}%`;
+            document.getElementById('btc-change').className = data.btc.change_24h >= 0 ? 'text-success' : 'text-danger';
+            
+            // 更新ETH数据
+            document.getElementById('eth-price').textContent = `$${data.eth.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById('eth-change').textContent = `${data.eth.change_24h.toFixed(2)}%`;
+            document.getElementById('eth-change').className = data.eth.change_24h >= 0 ? 'text-success' : 'text-danger';
+            
+            // 更新K线数据
+            if (data.btc.klines && data.eth.klines) {
+                updateChart(data.btc.klines);
             }
         })
-        .catch(error => {
-            console.error('Error fetching market data:', error);
-        });
+        .catch(error => console.error('Error:', error));
 }
 
 // 更新账户数据
@@ -228,53 +228,48 @@ function updateAccountData() {
     fetch('/api/account-data')
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                document.getElementById('total-balance').textContent = data.balance;
-                document.getElementById('daily-pnl').textContent = data.daily_pnl;
-                document.getElementById('open-positions').textContent = data.open_positions;
-                document.getElementById('total-position').textContent = data.total_position;
-            } else {
+            if (data.error) {
                 console.error('Error fetching account data:', data.error);
+                return;
             }
+            
+            // 更新总余额
+            document.getElementById('total-balance').textContent = `$${data.total_balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            
+            // 更新今日盈亏
+            document.getElementById('daily-pnl').textContent = `$${data.daily_pnl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            document.getElementById('daily-pnl').className = data.daily_pnl >= 0 ? 'text-success' : 'text-danger';
+            
+            // 更新持仓数量
+            document.getElementById('open-positions').textContent = data.positions.length;
+            
+            // 更新持仓价值
+            const totalPositionValue = data.positions.reduce((sum, pos) => sum + pos.value, 0);
+            document.getElementById('total-position').textContent = `$${totalPositionValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            
+            // 更新持仓表格
+            const positionsTable = document.getElementById('positionsTable');
+            positionsTable.innerHTML = '';
+            
+            data.positions.forEach(position => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${position.exchange}</td>
+                    <td>${position.asset}</td>
+                    <td>${position.free.toFixed(8)}</td>
+                    <td>${position.locked.toFixed(8)}</td>
+                    <td>$${position.price.toFixed(2)}</td>
+                    <td>$${position.value.toFixed(2)}</td>
+                    <td>${position.leverage ? position.leverage + 'x' : '-'}</td>
+                    <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
+                        ${position.unrealized_pnl ? '$' + position.unrealized_pnl.toFixed(2) : '-'}
+                    </td>
+                    <td>${position.liquidation_price ? '$' + position.liquidation_price.toFixed(2) : '-'}</td>
+                `;
+                positionsTable.appendChild(row);
+            });
         })
-        .catch(error => {
-            console.error('Error fetching account data:', error);
-        });
-}
-
-// 更新持仓数据
-function updatePositionsData() {
-    fetch('/api/account-data')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const positionsTable = document.getElementById('positionsTable');
-                positionsTable.innerHTML = '';
-                
-                if (data.positions && data.positions.length > 0) {
-                    data.positions.forEach(position => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${position.exchange}</td>
-                            <td>${position.asset}</td>
-                            <td>${position.free.toFixed(8)}</td>
-                            <td>${position.locked.toFixed(8)}</td>
-                            <td>$${position.price.toFixed(2)}</td>
-                            <td>$${position.value.toFixed(2)}</td>
-                            <td>${position.leverage ? position.leverage + 'x' : '-'}</td>
-                            <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
-                                ${position.unrealized_pnl ? '$' + position.unrealized_pnl.toFixed(2) : '-'}
-                            </td>
-                            <td>${position.liquidation_price ? '$' + position.liquidation_price.toFixed(2) : '-'}</td>
-                        `;
-                        positionsTable.appendChild(row);
-                    });
-                } else {
-                    positionsTable.innerHTML = '<tr><td colspan="9" class="text-center">暂无持仓</td></tr>';
-                }
-            }
-        })
-        .catch(error => console.error('Error updating positions data:', error));
+        .catch(error => console.error('Error:', error));
 }
 
 // 在页面加载时初始化
@@ -285,13 +280,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // 立即更新数据
     updateMarketData();
     updateAccountData();
-    updatePositionsData();
     updateKlineChart();
     
     // 设置定时更新
     setInterval(updateMarketData, 5000);  // 每5秒更新市场数据
     setInterval(updateAccountData, 10000);  // 每10秒更新账户数据
-    setInterval(updatePositionsData, 10000);  // 每10秒更新持仓数据
     setInterval(updateKlineChart, 5000);  // 每5秒更新K线图表
     
     // 监听时间周期和交易对选择变化
