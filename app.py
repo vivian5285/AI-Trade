@@ -24,16 +24,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # 初始化数据库
 db = SQLAlchemy(app)
 
-# 确保实例文件夹存在
-try:
-    os.makedirs(app.instance_path)
-except OSError:
-    pass
-
-# 确保数据库文件存在
-with app.app_context():
-    db.create_all()
-
 # API密钥模型
 class APIKey(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -53,6 +43,27 @@ class TradeHistory(db.Model):
     quantity = db.Column(db.Float, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), nullable=False)  # OPEN, CLOSED, CANCELLED
+
+# 确保实例文件夹存在
+try:
+    os.makedirs(app.instance_path)
+except OSError:
+    pass
+
+# 创建数据库表
+with app.app_context():
+    db.create_all()
+    
+    # 检查是否需要添加默认API密钥
+    if not APIKey.query.first():
+        default_key = APIKey(
+            exchange='LBank',
+            api_key=os.getenv('BINANCE_API_KEY'),
+            api_secret=os.getenv('BINANCE_API_SECRET'),
+            is_active=True
+        )
+        db.session.add(default_key)
+        db.session.commit()
 
 # 路由：首页/仪表盘
 @app.route('/')
