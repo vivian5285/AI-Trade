@@ -14,6 +14,7 @@ import hashlib
 import time
 import logging
 import subprocess
+import signal
 
 # 加载环境变量
 load_dotenv()
@@ -52,77 +53,106 @@ try:
 except OSError:
     pass
 
+# 配置日志记录
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # 创建数据库表
-with app.app_context():
-    db.create_all()
-    
-    # 检查是否需要添加默认API密钥
-    if not APIKey.query.first():
-        # 获取环境变量
-        binance_api_key = os.getenv('BINANCE_API_KEY')
-        binance_api_secret = os.getenv('BINANCE_API_SECRET')
-        lbank_api_key = os.getenv('LBANK_API_KEY')
-        lbank_api_secret = os.getenv('LBANK_API_SECRET')
+try:
+    with app.app_context():
+        db.create_all()
         
-        if not all([binance_api_key, binance_api_secret, lbank_api_key, lbank_api_secret]):
-            print("Warning: Some API keys are missing in .env file")
-        
-        # 添加Binance默认密钥
-        binance_key = APIKey(
-            exchange='Binance',
-            api_key=binance_api_key or '',
-            api_secret=binance_api_secret or '',
-            is_active=True
-        )
-        db.session.add(binance_key)
-        
-        # 添加LBank默认密钥
-        lbank_key = APIKey(
-            exchange='LBank',
-            api_key=lbank_api_key or '',
-            api_secret=lbank_api_secret or '',
-            is_active=True
-        )
-        db.session.add(lbank_key)
-        
-        try:
-            db.session.commit()
-            print("Successfully initialized database with API keys")
-        except Exception as e:
-            print(f"Error initializing database: {str(e)}")
-            db.session.rollback()
+        # 检查是否需要添加默认API密钥
+        if not APIKey.query.first():
+            # 获取环境变量
+            binance_api_key = os.getenv('BINANCE_API_KEY')
+            binance_api_secret = os.getenv('BINANCE_API_SECRET')
+            lbank_api_key = os.getenv('LBANK_API_KEY')
+            lbank_api_secret = os.getenv('LBANK_API_SECRET')
+            
+            if not all([binance_api_key, binance_api_secret, lbank_api_key, lbank_api_secret]):
+                logger.warning("Some API keys are missing in .env file")
+            
+            # 添加Binance默认密钥
+            binance_key = APIKey(
+                exchange='Binance',
+                api_key=binance_api_key or '',
+                api_secret=binance_api_secret or '',
+                is_active=True
+            )
+            db.session.add(binance_key)
+            
+            # 添加LBank默认密钥
+            lbank_key = APIKey(
+                exchange='LBank',
+                api_key=lbank_api_key or '',
+                api_secret=lbank_api_secret or '',
+                is_active=True
+            )
+            db.session.add(lbank_key)
+            
+            try:
+                db.session.commit()
+                logger.info("Successfully initialized database with API keys")
+            except Exception as e:
+                logger.error(f"Error initializing database: {str(e)}")
+                db.session.rollback()
+except Exception as e:
+    logger.error(f"Error during database initialization: {str(e)}")
+
+# 添加全局变量来跟踪交易机器人进程
+trading_bot_process = None
 
 # 路由：首页/仪表盘
 @app.route('/')
 def dashboard():
-    api_keys = APIKey.query.all()
-    trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(10).all()
-    return render_template('dashboard.html', api_keys=api_keys, trades=trades)
+    try:
+        api_keys = APIKey.query.all()
+        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(10).all()
+        return render_template('dashboard.html', api_keys=api_keys, trades=trades)
+    except Exception as e:
+        logger.error(f"Error in dashboard route: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
 
 # 路由：API密钥管理
 @app.route('/api-keys', methods=['GET', 'POST'])
 def api_keys():
-    if request.method == 'POST':
-        exchange = request.form.get('exchange')
-        api_key = request.form.get('api_key')
-        api_secret = request.form.get('api_secret')
-        
-        # 验证API密钥
-        if not validate_api_key(exchange, api_key, api_secret):
-            flash('无效的API凭证')
-            return redirect(url_for('api_keys'))
+    try:
+        if request.method == 'POST':
+            exchange = request.form.get('exchange')
+            api_key = request.form.get('api_key')
+            api_secret = request.form.get('api_secret')
             
-        new_key = APIKey(
-            exchange=exchange,
-            api_key=api_key,
-            api_secret=api_secret
-        )
-        db.session.add(new_key)
-        db.session.commit()
-        flash('API密钥添加成功')
-        
-    api_keys = APIKey.query.all()
-    return render_template('api_keys.html', api_keys=api_keys)
+            if not all([exchange, api_key, api_secret]):
+                flash('请填写所有必填字段')
+                return redirect(url_for('api_keys'))
+            
+            # 验证API密钥
+            if not validate_api_key(exchange, api_key, api_secret):
+                flash('无效的API凭证')
+                return redirect(url_for('api_keys'))
+                
+            new_key = APIKey(
+                exchange=exchange,
+                api_key=api_key,
+                api_secret=api_secret
+            )
+            db.session.add(new_key)
+            db.session.commit()
+            flash('API密钥添加成功')
+            
+        api_keys = APIKey.query.all()
+        return render_template('api_keys.html', api_keys=api_keys)
+    except Exception as e:
+        logger.error(f"Error in api_keys route: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
 
 # 路由：交易历史
 @app.route('/trades')
@@ -651,10 +681,8 @@ def get_settings():
 @app.route('/api/trading-bot/status')
 def get_trading_bot_status():
     try:
-        # 检查交易机器人服务状态
-        result = subprocess.run(['systemctl', 'is-active', 'trading-bot'], 
-                              capture_output=True, text=True)
-        is_running = result.stdout.strip() == 'active'
+        global trading_bot_process
+        is_running = trading_bot_process is not None and trading_bot_process.poll() is None
         return jsonify({
             'success': True,
             'is_running': is_running
@@ -668,8 +696,21 @@ def get_trading_bot_status():
 @app.route('/api/trading-bot/start', methods=['POST'])
 def start_trading_bot():
     try:
-        # 启动交易机器人服务
-        subprocess.run(['systemctl', 'start', 'trading-bot'], check=True)
+        global trading_bot_process
+        
+        # 如果已经有进程在运行，先停止它
+        if trading_bot_process is not None and trading_bot_process.poll() is None:
+            trading_bot_process.terminate()
+            trading_bot_process.wait()
+        
+        # 启动新的进程
+        if os.name == 'nt':  # Windows
+            trading_bot_process = subprocess.Popen(['python', 'run_trading_bot.py'],
+                                                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+        else:  # Linux/Unix
+            trading_bot_process = subprocess.Popen(['python3', 'run_trading_bot.py'],
+                                                 preexec_fn=os.setpgrp)
+            
         return jsonify({
             'success': True,
             'message': '交易机器人已启动'
@@ -683,8 +724,16 @@ def start_trading_bot():
 @app.route('/api/trading-bot/stop', methods=['POST'])
 def stop_trading_bot():
     try:
-        # 停止交易机器人服务
-        subprocess.run(['systemctl', 'stop', 'trading-bot'], check=True)
+        global trading_bot_process
+        
+        if trading_bot_process is not None:
+            if os.name == 'nt':  # Windows
+                trading_bot_process.terminate()
+            else:  # Linux/Unix
+                os.killpg(os.getpgid(trading_bot_process.pid), signal.SIGTERM)
+            trading_bot_process.wait()
+            trading_bot_process = None
+            
         return jsonify({
             'success': True,
             'message': '交易机器人已停止'
@@ -698,17 +747,37 @@ def stop_trading_bot():
 @app.route('/api/trading-bot/restart', methods=['POST'])
 def restart_trading_bot():
     try:
-        # 重启交易机器人服务
-        subprocess.run(['systemctl', 'restart', 'trading-bot'], check=True)
-        return jsonify({
-            'success': True,
-            'message': '交易机器人已重启'
-        })
+        # 先停止
+        stop_response = stop_trading_bot()
+        if not stop_response.json['success']:
+            return stop_response
+            
+        # 再启动
+        return start_trading_bot()
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+# 添加错误处理装饰器
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal Server Error: {str(error)}")
+    return jsonify({
+        'success': False,
+        'error': 'Internal Server Error',
+        'message': str(error)
+    }), 500
+
+@app.errorhandler(404)
+def not_found_error(error):
+    logger.error(f"Not Found Error: {str(error)}")
+    return jsonify({
+        'success': False,
+        'error': 'Not Found',
+        'message': str(error)
+    }), 404
 
 if __name__ == '__main__':
     # 修改为监听本地地址，让 Nginx 处理外部请求

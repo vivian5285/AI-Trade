@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}错误 - AI Trading System{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">系统错误</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger">
+                        <h5>发生错误</h5>
+                        <p>{{ error }}</p>
+                    </div>
+                    <p>请尝试以下操作：</p>
+                    <ul>
+                        <li>刷新页面</li>
+                        <li>检查网络连接</li>
+                        <li>清除浏览器缓存</li>
+                        <li>如果问题持续存在，请联系管理员</li>
+                    </ul>
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-primary">返回首页</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
