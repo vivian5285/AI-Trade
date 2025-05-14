@@ -1,212 +1,253 @@
-<!-- 在仪表盘卡片后添加 -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0">交易机器人控制</h5>
-    </div>
-    <div class="card-body">
-        <div class="row align-items-center">
-            <div class="col-md-6">
-                <div class="d-flex align-items-center">
-                    <div class="me-3">
-                        <div class="status-indicator" id="botStatusIndicator"></div>
-                    </div>
-                    <div>
-                        <h6 class="mb-0">交易机器人状态</h6>
-                        <p class="text-muted mb-0" id="botStatusText">正在检查...</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 text-end">
-                <button class="btn btn-success me-2" id="startBot" disabled>
-                    <i class="fas fa-play"></i> 启动
-                </button>
-                <button class="btn btn-danger me-2" id="stopBot" disabled>
-                    <i class="fas fa-stop"></i> 停止
-                </button>
-                <button class="btn btn-warning" id="restartBot" disabled>
-                    <i class="fas fa-sync"></i> 重启
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 在页面底部的JavaScript部分添加 -->
-<script>
-// 交易机器人控制
-function updateBotStatus() {
-    fetch('/api/trading-bot/status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const isRunning = data.is_running;
-                const statusIndicator = document.getElementById('botStatusIndicator');
-                const statusText = document.getElementById('botStatusText');
-                const startBtn = document.getElementById('startBot');
-                const stopBtn = document.getElementById('stopBot');
-                const restartBtn = document.getElementById('restartBot');
-                
-                if (isRunning) {
-                    statusIndicator.className = 'status-indicator active';
-                    statusText.textContent = '运行中';
-                    startBtn.disabled = true;
-                    stopBtn.disabled = false;
-                    restartBtn.disabled = false;
-                } else {
-                    statusIndicator.className = 'status-indicator';
-                    statusText.textContent = '已停止';
-                    startBtn.disabled = false;
-                    stopBtn.disabled = true;
-                    restartBtn.disabled = true;
-                }
-            }
-        })
-        .catch(error => {
-            console.error('获取交易机器人状态失败:', error);
-        });
-}
-
-// 启动交易机器人
-document.getElementById('startBot').addEventListener('click', function() {
-    fetch('/api/trading-bot/start', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showNotification('success', data.message);
-            setTimeout(updateBotStatus, 1000);
-        } else {
-            showNotification('error', data.error);
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trading System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background-color: #343a40;
+            padding-top: 20px;
         }
-    })
-    .catch(error => {
-        showNotification('error', '启动交易机器人失败');
-    });
-});
-
-// 停止交易机器人
-document.getElementById('stopBot').addEventListener('click', function() {
-    fetch('/api/trading-bot/stop', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showNotification('success', data.message);
-            setTimeout(updateBotStatus, 1000);
-        } else {
-            showNotification('error', data.error);
+        .sidebar a {
+            color: #fff;
+            text-decoration: none;
+            padding: 10px 20px;
+            display: block;
         }
-    })
-    .catch(error => {
-        showNotification('error', '停止交易机器人失败');
-    });
-});
-
-// 重启交易机器人
-document.getElementById('restartBot').addEventListener('click', function() {
-    fetch('/api/trading-bot/restart', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showNotification('success', data.message);
-            setTimeout(updateBotStatus, 1000);
-        } else {
-            showNotification('error', data.error);
+        .sidebar a:hover {
+            background-color: #495057;
         }
-    })
-    .catch(error => {
-        showNotification('error', '重启交易机器人失败');
-    });
-});
-
-// 定期更新状态
-setInterval(updateBotStatus, 5000);
-updateBotStatus();
-</script>
-
-<style>
-.status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background-color: #dc3545;
-    display: inline-block;
-}
-
-.status-indicator.active {
-    background-color: #28a745;
-}
-</style>
-
-<!-- 最近交易 -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">最近交易</h5>
+        .main-content {
+            padding: 20px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            display: inline-block;
+        }
+        .status-indicator.active {
+            background-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-2 sidebar">
+                <h3 class="text-white text-center mb-4">AI Trading</h3>
+                <a href="/"><i class="fas fa-chart-line"></i> 仪表盘</a>
+                <a href="/api-keys"><i class="fas fa-key"></i> API密钥</a>
+                <a href="/trades"><i class="fas fa-history"></i> 交易历史</a>
+                <a href="/settings"><i class="fas fa-cog"></i> 系统设置</a>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>时间</th>
-                                <th>交易所</th>
-                                <th>交易对</th>
-                                <th>方向</th>
-                                <th>价格</th>
-                                <th>数量</th>
-                                <th>状态</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+            <div class="col-md-10 main-content">
+                <div class="container-fluid">
+                    <h2 class="mb-4">交易仪表盘</h2>
 
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 交易机器人控制 -->
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">交易机器人控制</h5>
-            </div>
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <div class="d-flex align-items-center">
-                            <div class="me-3">
-                                <div class="status-indicator" id="botStatusIndicator"></div>
+                    <!-- API密钥状态 -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">MT4</h5>
+                                    <span class="badge bg-danger">未连接</span>
+                                </div>
                             </div>
-                            <div>
-                                <h6 class="mb-0">交易机器人状态</h6>
-                                <p class="text-muted mb-0" id="botStatusText">正在检查...</p>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Binance</h5>
+                                    <span class="badge bg-success">已连接</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">LBank</h5>
+                                    <span class="badge bg-success">已连接</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6 text-end">
-                        <button class="btn btn-success me-2" id="startBot" disabled>
-                            <i class="fas fa-play"></i> 启动
-                        </button>
-                        <button class="btn btn-danger me-2" id="stopBot" disabled>
-                            <i class="fas fa-stop"></i> 停止
-                        </button>
-                        <button class="btn btn-warning" id="restartBot" disabled>
-                            <i class="fas fa-sync"></i> 重启
-                        </button>
+
+                    <!-- 交易机器人控制 -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">交易机器人控制</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-6">
+                                            <div class="d-flex align-items-center">
+                                                <div class="me-3">
+                                                    <div class="status-indicator" id="botStatusIndicator"></div>
+                                                </div>
+                                                <div>
+                                                    <h6 class="mb-0">交易机器人状态</h6>
+                                                    <p class="text-muted mb-0" id="botStatusText">正在检查...</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 text-end">
+                                            <button class="btn btn-success me-2" id="startBot" disabled>
+                                                <i class="fas fa-play"></i> 启动
+                                            </button>
+                                            <button class="btn btn-danger me-2" id="stopBot" disabled>
+                                                <i class="fas fa-stop"></i> 停止
+                                            </button>
+                                            <button class="btn btn-warning" id="restartBot" disabled>
+                                                <i class="fas fa-sync"></i> 重启
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 最近交易 -->
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">最近交易</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>时间</th>
+                                                    <th>交易所</th>
+                                                    <th>交易对</th>
+                                                    <th>方向</th>
+                                                    <th>价格</th>
+                                                    <th>数量</th>
+                                                    <th>状态</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-</div> 
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // 交易机器人控制
+    function updateBotStatus() {
+        fetch('/api/trading-bot/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const isRunning = data.is_running;
+                    const statusIndicator = document.getElementById('botStatusIndicator');
+                    const statusText = document.getElementById('botStatusText');
+                    const startBtn = document.getElementById('startBot');
+                    const stopBtn = document.getElementById('stopBot');
+                    const restartBtn = document.getElementById('restartBot');
+                    
+                    if (isRunning) {
+                        statusIndicator.className = 'status-indicator active';
+                        statusText.textContent = '运行中';
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                        restartBtn.disabled = false;
+                    } else {
+                        statusIndicator.className = 'status-indicator';
+                        statusText.textContent = '已停止';
+                        startBtn.disabled = false;
+                        stopBtn.disabled = true;
+                        restartBtn.disabled = true;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('获取交易机器人状态失败:', error);
+            });
+    }
+
+    // 启动交易机器人
+    document.getElementById('startBot').addEventListener('click', function() {
+        fetch('/api/trading-bot/start', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', data.message);
+                setTimeout(updateBotStatus, 1000);
+            } else {
+                showNotification('error', data.error);
+            }
+        })
+        .catch(error => {
+            showNotification('error', '启动交易机器人失败');
+        });
+    });
+
+    // 停止交易机器人
+    document.getElementById('stopBot').addEventListener('click', function() {
+        fetch('/api/trading-bot/stop', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', data.message);
+                setTimeout(updateBotStatus, 1000);
+            } else {
+                showNotification('error', data.error);
+            }
+        })
+        .catch(error => {
+            showNotification('error', '停止交易机器人失败');
+        });
+    });
+
+    // 重启交易机器人
+    document.getElementById('restartBot').addEventListener('click', function() {
+        fetch('/api/trading-bot/restart', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('success', data.message);
+                setTimeout(updateBotStatus, 1000);
+            } else {
+                showNotification('error', data.error);
+            }
+        })
+        .catch(error => {
+            showNotification('error', '重启交易机器人失败');
+        });
+    });
+
+    // 定期更新状态
+    setInterval(updateBotStatus, 5000);
+    updateBotStatus();
+    </script>
+</body>
+</html> 
