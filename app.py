@@ -37,7 +37,7 @@ with app.app_context():
 # API密钥模型
 class APIKey(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    exchange = db.Column(db.String(20), nullable=False)  # MT4, Binance, LBank
+    exchange = db.Column(db.String(20), nullable=False)  # LBank
     api_key = db.Column(db.String(100), nullable=False)
     api_secret = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -99,41 +99,37 @@ def settings():
 
 # API密钥验证函数
 def validate_api_key(exchange, api_key, api_secret):
-    # TODO: 实现实际的API密钥验证逻辑
-    return True
+    try:
+        timestamp = str(int(time.time() * 1000))
+        params = {
+            'api_key': api_key,
+            'timestamp': timestamp
+        }
+        sign = generate_lbank_sign(params, api_secret)
+        params['sign'] = sign
+        
+        response = requests.get('https://api.lbank.info/v2/user/account', params=params)
+        data = response.json()
+        
+        return data.get('result', False)
+    except Exception as e:
+        print(f"API验证错误: {str(e)}")
+        return False
 
 # 加载配置
 def load_config():
-    if os.path.exists('config.json'):
-        with open('config.json', 'r') as f:
-            return json.load(f)
-    return {
-        'binance_api_key': '',
-        'binance_api_secret': '',
-        'lbank_api_key': '',
-        'lbank_api_secret': '',
+    config = {
+        'lbank_api_key': os.getenv('BINANCE_API_KEY'),
+        'lbank_api_secret': os.getenv('BINANCE_API_SECRET'),
         'trading_settings': {
-            'trading_pair': 'BTC-USDT',
-            'leverage': '10',
-            'quantity': '0.001',
-            'stop_loss': '0.3',
-            'take_profit': '0.6'
+            'trading_pair': os.getenv('TRADING_PAIR', 'ETHUSDT'),
+            'leverage': os.getenv('LEVERAGE', '50'),
+            'quantity': os.getenv('QUANTITY', '0.2'),
+            'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '0.3'),
+            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '0.6')
         }
     }
-
-def save_config(config):
-    with open('config.json', 'w') as f:
-        json.dump(config, f, indent=4)
-
-# API函数
-def get_binance_balance(config):
-    try:
-        client = Client(config['binance_api_key'], config['binance_api_secret'])
-        account = client.futures_account_balance()
-        return {balance['asset']: float(balance['balance']) for balance in account}
-    except Exception as e:
-        flash(f'获取Binance余额失败: {str(e)}')
-        return None
+    return config
 
 def get_lbank_balance(config):
     try:
@@ -152,17 +148,8 @@ def get_lbank_balance(config):
             return {balance['asset']: float(balance['balance']) for balance in data['data']}
         return None
     except Exception as e:
-        flash(f'获取LBank余额失败: {str(e)}')
+        print(f'获取LBank余额失败: {str(e)}')
         return None
-
-def get_binance_trades(config):
-    try:
-        client = Client(config['binance_api_key'], config['binance_api_secret'])
-        trades = client.futures_account_trades()
-        return trades
-    except Exception as e:
-        flash(f'获取Binance交易记录失败: {str(e)}')
-        return []
 
 def get_lbank_trades(config):
     try:
@@ -181,7 +168,7 @@ def get_lbank_trades(config):
             return data['data']
         return []
     except Exception as e:
-        flash(f'获取LBank交易记录失败: {str(e)}')
+        print(f'获取LBank交易记录失败: {str(e)}')
         return []
 
 def generate_lbank_sign(params, api_secret):
