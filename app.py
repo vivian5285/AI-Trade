@@ -1798,13 +1798,17 @@ def get_bot_status(bot_id):
     try:
         bot = TradingBotConfig.query.get(bot_id)
         if not bot:
-            return jsonify({'status': 'error', 'message': 'Bot not found'}), 404
+            return api_response(
+                success=False,
+                error="机器人不存在",
+                message="找不到指定的机器人",
+                status_code=404
+            )
             
         performance = bot_manager.get_bot_performance(bot_id)
         
-        return jsonify({
-            'status': 'success',
-            'data': {
+        return api_response(
+            data={
                 'id': bot.id,
                 'name': bot.name,
                 'exchange': bot.exchange,
@@ -1814,9 +1818,15 @@ def get_bot_status(bot_id):
                 'funds': bot.funds,
                 'performance': performance
             }
-        })
+        )
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        logger.error(f"Error getting bot status: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取机器人状态失败",
+            status_code=500
+        )
 
 @app.route('/api/high-frequency/settings', methods=['POST'])
 def update_high_frequency_settings():
@@ -1856,6 +1866,237 @@ def update_high_frequency_settings():
         return jsonify({'success': True, 'message': '设置已更新'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+# 路由：交易机器人页面
+@app.route('/trading-bots')
+def trading_bots():
+    try:
+        # 获取所有交易机器人
+        bots = TradingBotConfig.query.all()
+        return render_template('trading_bots.html', bots=bots)
+    except Exception as e:
+        logger.error(f"Error loading trading bots page: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+# 路由：创建交易机器人页面
+@app.route('/trading-bots/create')
+def create_trading_bot():
+    try:
+        return render_template('create_trading_bot.html')
+    except Exception as e:
+        logger.error(f"Error loading create trading bot page: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+# 路由：单个交易机器人页面
+@app.route('/trading-bots/<int:bot_id>')
+def trading_bot_detail(bot_id):
+    try:
+        bot = TradingBotConfig.query.get_or_404(bot_id)
+        # 获取机器人的交易历史
+        trades = TradeHistory.query.filter_by(bot_id=bot_id).order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        # 获取策略设置
+        settings = {
+            'rsi_period': 14,
+            'rsi_overbought': 70,
+            'rsi_oversold': 30,
+            'bb_period': 20,
+            'bb_std': 2.0,
+            'supertrend_atr_period': 10,
+            'supertrend_atr_multiplier': 3.0,
+            'grid_count': 10,
+            'grid_spacing': 0.5
+        }
+        return render_template('trading_bot.html', bot=bot, trades=trades, settings=settings)
+    except Exception as e:
+        logger.error(f"Error loading trading bot detail page: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
+
+# 路由：启动交易机器人
+@app.route('/api/trading-bot/start', methods=['POST'])
+@handle_errors
+@log_request
+def start_trading_bot():
+    try:
+        bot_id = request.json.get('bot_id')
+        if not bot_id:
+            return api_response(
+                success=False,
+                error="缺少机器人ID",
+                message="请提供机器人ID",
+                status_code=400
+            )
+            
+        success = bot_manager.start_bot(bot_id)
+        if success:
+            return api_response(
+                message="机器人启动成功"
+            )
+        else:
+            return api_response(
+                success=False,
+                error="启动失败",
+                message="无法启动机器人",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error starting bot: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="启动机器人失败",
+            status_code=500
+        )
+
+# 路由：停止交易机器人
+@app.route('/api/trading-bot/stop', methods=['POST'])
+@handle_errors
+@log_request
+def stop_trading_bot():
+    try:
+        bot_id = request.json.get('bot_id')
+        if not bot_id:
+            return api_response(
+                success=False,
+                error="缺少机器人ID",
+                message="请提供机器人ID",
+                status_code=400
+            )
+            
+        success = bot_manager.stop_bot(bot_id)
+        if success:
+            return api_response(
+                message="机器人停止成功"
+            )
+        else:
+            return api_response(
+                success=False,
+                error="停止失败",
+                message="无法停止机器人",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error stopping bot: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="停止机器人失败",
+            status_code=500
+        )
+
+# 路由：重启交易机器人
+@app.route('/api/trading-bot/restart', methods=['POST'])
+@handle_errors
+@log_request
+def restart_trading_bot():
+    try:
+        bot_id = request.json.get('bot_id')
+        if not bot_id:
+            return api_response(
+                success=False,
+                error="缺少机器人ID",
+                message="请提供机器人ID",
+                status_code=400
+            )
+            
+        # 先停止机器人
+        bot_manager.stop_bot(bot_id)
+        # 然后启动机器人
+        success = bot_manager.start_bot(bot_id)
+        
+        if success:
+            return api_response(
+                message="机器人重启成功"
+            )
+        else:
+            return api_response(
+                success=False,
+                error="重启失败",
+                message="无法重启机器人",
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"Error restarting bot: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="重启机器人失败",
+            status_code=500
+        )
+
+# 路由：获取交易机器人状态
+@app.route('/api/trading-bot/status')
+@handle_errors
+@log_request
+def get_trading_bot_status():
+    try:
+        bot_id = request.args.get('bot_id')
+        if not bot_id:
+            return api_response(
+                success=False,
+                error="缺少机器人ID",
+                message="请提供机器人ID",
+                status_code=400
+            )
+            
+        bot = TradingBotConfig.query.get(bot_id)
+        if not bot:
+            return api_response(
+                success=False,
+                error="机器人不存在",
+                message="找不到指定的机器人",
+                status_code=404
+            )
+            
+        return api_response(
+            data={
+                'is_running': bot.status == 'RUNNING',
+                'status': bot.status,
+                'performance': json.loads(bot.performance) if bot.performance else None
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting bot status: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取机器人状态失败",
+            status_code=500
+        )
+
+# 路由：获取交易机器人日志
+@app.route('/api/trading-bot/logs')
+@handle_errors
+@log_request
+def get_trading_bot_logs():
+    try:
+        bot_id = request.args.get('bot_id')
+        if not bot_id:
+            return api_response(
+                success=False,
+                error="缺少机器人ID",
+                message="请提供机器人ID",
+                status_code=400
+            )
+            
+        logs = TradingBotLog.query.filter_by(bot_id=bot_id).order_by(TradingBotLog.created_at.desc()).limit(100).all()
+        
+        return api_response(
+            data={
+                'logs': [{
+                    'action': log.action,
+                    'details': log.details,
+                    'timestamp': log.created_at.isoformat()
+                } for log in logs]
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting bot logs: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取机器人日志失败",
+            status_code=500
+        )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
