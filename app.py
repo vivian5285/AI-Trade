@@ -36,6 +36,14 @@ def handle_errors(f):
             return jsonify({"error": str(e)}), 500
     return decorated_function
 
+# 请求日志装饰器
+def log_request(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        logger.info(f"Request to {f.__name__} from {request.remote_addr}")
+        return f(*args, **kwargs)
+    return decorated_function
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
