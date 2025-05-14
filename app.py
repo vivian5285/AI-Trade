@@ -22,7 +22,14 @@ from trading_bot_manager import trading_bot_manager
 load_dotenv()
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/root/AI-Trade/logs/app.log'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # 错误处理装饰器
@@ -44,20 +51,57 @@ def log_request(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# 参数验证装饰器
+def validate_params(*required_params):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "No data provided"}), 400
+            
+            missing_params = [param for param in required_params if param not in data]
+            if missing_params:
+                return jsonify({
+                    "error": f"Missing required parameters: {', '.join(missing_params)}"
+                }), 400
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Binance客户端获取函数
+def get_binance_client():
+    try:
+        api_key = os.getenv('BINANCE_API_KEY')
+        api_secret = os.getenv('BINANCE_API_SECRET')
+        
+        if not api_key or not api_secret:
+            raise ValueError("Binance API credentials not found in environment variables")
+        
+        return Client(api_key, api_secret)
+    except Exception as e:
+        logger.error(f"Error creating Binance client: {str(e)}")
+        raise
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////root/AI-Trade/instance/trade.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # 初始化数据库
 db = SQLAlchemy(app)
 
 # 在创建应用实例后，确保数据库目录存在
-if not os.path.exists('instance'):
-    os.makedirs('instance')
+if not os.path.exists('/root/AI-Trade/instance'):
+    os.makedirs('/root/AI-Trade/instance')
+
+# 确保日志目录存在
+if not os.path.exists('/root/AI-Trade/logs'):
+    os.makedirs('/root/AI-Trade/logs')
 
 # 确保数据库文件路径正确
-db_path = os.path.join('instance', 'trade.db')
+db_path = '/root/AI-Trade/instance/trade.db'
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 
 # 创建所有数据库表
@@ -1910,4 +1954,4 @@ def update_high_frequency_settings():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False) 
+    app.run(host='0.0.0.0', port=5000, debug=True) 
