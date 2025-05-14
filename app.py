@@ -1548,32 +1548,29 @@ def create_trading_bot():
                 status_code=400
             )
         
-        # 保存到数据库
-        db = get_db()
-        db.execute('''
-            INSERT INTO trading_bots (
-                name, exchange, trading_pair, status, strategies, funds,
-                leverage, stop_loss, take_profit, max_daily_trades
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['name'],
-            data['exchange'],
-            data['trading_pair'],
-            'STOPPED',
-            json.dumps(data['strategies']),
-            data['funds'],
-            data['leverage'],
-            data['stop_loss'],
-            data['take_profit'],
-            data['max_daily_trades']
-        ))
-        db.commit()
+        # 创建新的交易机器人配置
+        new_bot = TradingBotConfig(
+            name=data['name'],
+            exchange=data['exchange'],
+            trading_pair=data['trading_pair'],
+            status='STOPPED',
+            strategies=json.dumps(data['strategies']),
+            funds=data['funds'],
+            leverage=data['leverage'],
+            stop_loss=data['stop_loss'],
+            take_profit=data['take_profit'],
+            max_daily_trades=data['max_daily_trades']
+        )
+        
+        db.session.add(new_bot)
+        db.session.commit()
         
         return api_response(
             message="交易机器人创建成功"
         )
     except Exception as e:
         logger.error(f"Error creating trading bot: {str(e)}")
+        db.session.rollback()
         return api_response(
             success=False,
             error=str(e),
