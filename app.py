@@ -57,11 +57,20 @@ with app.app_context():
     
     # 检查是否需要添加默认API密钥
     if not APIKey.query.first():
+        # 获取环境变量
+        binance_api_key = os.getenv('BINANCE_API_KEY')
+        binance_api_secret = os.getenv('BINANCE_API_SECRET')
+        lbank_api_key = os.getenv('LBANK_API_KEY')
+        lbank_api_secret = os.getenv('LBANK_API_SECRET')
+        
+        if not all([binance_api_key, binance_api_secret, lbank_api_key, lbank_api_secret]):
+            print("Warning: Some API keys are missing in .env file")
+        
         # 添加Binance默认密钥
         binance_key = APIKey(
             exchange='Binance',
-            api_key=os.getenv('BINANCE_API_KEY', ''),
-            api_secret=os.getenv('BINANCE_API_SECRET', ''),
+            api_key=binance_api_key or '',
+            api_secret=binance_api_secret or '',
             is_active=True
         )
         db.session.add(binance_key)
@@ -69,14 +78,15 @@ with app.app_context():
         # 添加LBank默认密钥
         lbank_key = APIKey(
             exchange='LBank',
-            api_key=os.getenv('LBANK_API_KEY', ''),
-            api_secret=os.getenv('LBANK_API_SECRET', ''),
+            api_key=lbank_api_key or '',
+            api_secret=lbank_api_secret or '',
             is_active=True
         )
         db.session.add(lbank_key)
         
         try:
             db.session.commit()
+            print("Successfully initialized database with API keys")
         except Exception as e:
             print(f"Error initializing database: {str(e)}")
             db.session.rollback()
