@@ -55,6 +55,29 @@
                             <p id="total-position">加载中...</p>
                         </div>
                     </div>
+                    <!-- 添加持仓详情 -->
+                    <div class="mt-3">
+                        <h6>持仓详情</h6>
+                        <div id="positions-details">
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>交易所</th>
+                                            <th>资产</th>
+                                            <th>可用</th>
+                                            <th>冻结</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="positions-table">
+                                        <tr>
+                                            <td colspan="4" class="text-center">加载中...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -140,10 +163,17 @@ function updateMarketData() {
     fetch('/api/market-data')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('btc-price').textContent = data.btc.price;
-            document.getElementById('btc-change').textContent = `24h变化: ${data.btc.change}%`;
-            document.getElementById('eth-price').textContent = data.eth.price;
-            document.getElementById('eth-change').textContent = `24h变化: ${data.eth.change}%`;
+            if (data.success) {
+                document.getElementById('btc-price').textContent = data.btc.price;
+                document.getElementById('btc-change').textContent = data.btc.change;
+                document.getElementById('eth-price').textContent = data.eth.price;
+                document.getElementById('eth-change').textContent = data.eth.change;
+            } else {
+                console.error('Error fetching market data:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching market data:', error);
         });
 }
 
@@ -152,10 +182,32 @@ function updateAccountData() {
     fetch('/api/account-data')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('total-balance').textContent = data.balance;
-            document.getElementById('daily-pnl').textContent = data.daily_pnl;
-            document.getElementById('open-positions').textContent = data.open_positions;
-            document.getElementById('total-position').textContent = data.total_position;
+            if (data.success) {
+                document.getElementById('total-balance').textContent = data.balance;
+                document.getElementById('daily-pnl').textContent = data.daily_pnl;
+                document.getElementById('open-positions').textContent = data.open_positions;
+                document.getElementById('total-position').textContent = data.total_position;
+                
+                // 更新持仓详情表格
+                const positionsTable = document.getElementById('positions-table');
+                if (data.positions && data.positions.length > 0) {
+                    positionsTable.innerHTML = data.positions.map(position => `
+                        <tr>
+                            <td>${position.exchange}</td>
+                            <td>${position.asset}</td>
+                            <td>${position.free.toFixed(8)}</td>
+                            <td>${position.locked.toFixed(8)}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    positionsTable.innerHTML = '<tr><td colspan="4" class="text-center">暂无持仓</td></tr>';
+                }
+            } else {
+                console.error('Error fetching account data:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching account data:', error);
         });
 }
 
@@ -222,26 +274,18 @@ document.getElementById('restart-bot').addEventListener('click', function() {
         });
 });
 
-// 初始化
+// 页面加载完成后开始更新数据
 document.addEventListener('DOMContentLoaded', function() {
-    // 设置状态指示器样式
-    const indicator = document.getElementById('bot-status-indicator');
-    indicator.style.width = '12px';
-    indicator.style.height = '12px';
-    indicator.style.borderRadius = '50%';
-    indicator.style.display = 'inline-block';
-    indicator.style.backgroundColor = '#dc3545';
-    
-    // 初始更新数据
+    // 立即更新一次数据
     updateMarketData();
     updateAccountData();
-    updateBotStatus();
     
-    // 定期更新数据
-    setInterval(updateMarketData, 10000);
-    setInterval(updateAccountData, 30000);
-    setInterval(updateBotStatus, 5000);
-
+    // 每5秒更新一次市场数据
+    setInterval(updateMarketData, 5000);
+    
+    // 每10秒更新一次账户数据
+    setInterval(updateAccountData, 10000);
+    
     // 检查是否需要滚动到交易机器人部分
     if (window.location.hash === '#trading-bot') {
         const tradingBotSection = document.getElementById('trading-bot');

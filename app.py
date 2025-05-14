@@ -394,68 +394,186 @@ def create_balance_chart(trades):
     fig = go.Figure(data=[trace], layout=layout)
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
-# API路由：市场数据
+# 路由：获取市场数据
 @app.route('/api/market-data')
-def market_data():
+def get_market_data():
     try:
-        # 获取Binance行情数据
-        client = Client()
-        btc_ticker = client.get_symbol_ticker(symbol='BTCUSDT')
-        eth_ticker = client.get_symbol_ticker(symbol='ETHUSDT')
+        # 获取当前交易所
+        current_exchange = os.getenv('CURRENT_EXCHANGE', 'Binance')
         
-        # 获取24小时价格变化
-        btc_24h = client.get_ticker(symbol='BTCUSDT')
-        eth_24h = client.get_ticker(symbol='ETHUSDT')
+        # 根据交易所获取市场数据
+        if current_exchange == 'Binance':
+            client = get_binance_client()
+            # 获取 BTC/USDT 数据
+            btc_ticker = client.get_ticker(symbol='BTCUSDT')
+            btc_price = float(btc_ticker['lastPrice'])
+            btc_change = float(btc_ticker['priceChangePercent'])
+            
+            # 获取 ETH/USDT 数据
+            eth_ticker = client.get_ticker(symbol='ETHUSDT')
+            eth_price = float(eth_ticker['lastPrice'])
+            eth_change = float(eth_ticker['priceChangePercent'])
+            
+        elif current_exchange == 'LBank':
+            client = get_lbank_client()
+            # 获取 BTC/USDT 数据
+            btc_ticker = client.get_ticker(symbol='btc_usdt')
+            btc_price = float(btc_ticker['ticker']['latest'])
+            btc_change = float(btc_ticker['ticker']['change'])
+            
+            # 获取 ETH/USDT 数据
+            eth_ticker = client.get_ticker(symbol='eth_usdt')
+            eth_price = float(eth_ticker['ticker']['latest'])
+            eth_change = float(eth_ticker['ticker']['change'])
         
         return jsonify({
+            'success': True,
             'btc': {
-                'price': f"{float(btc_ticker['price']):,.2f}",
-                'change': f"{float(btc_24h['priceChangePercent']):.2f}"
+                'price': f'${btc_price:,.2f}',
+                'change': f'{btc_change:+.2f}%'
             },
             'eth': {
-                'price': f"{float(eth_ticker['price']):,.2f}",
-                'change': f"{float(eth_24h['priceChangePercent']):.2f}"
+                'price': f'${eth_price:,.2f}',
+                'change': f'{eth_change:+.2f}%'
             }
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error getting market data: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
-# API路由：账户数据
+# 路由：获取账户数据
 @app.route('/api/account-data')
-def account_data():
+def get_account_data():
     try:
-        config = load_config()
-        total_balance = 0
-        daily_pnl = 0
-        open_positions = 0
-        total_position = 0
+        # 获取所有活跃的API密钥
+        api_keys = APIKey.query.filter_by(is_active=True).all()
         
-        # 获取Binance账户数据
-        if config['binance_api_key'] and config['binance_api_secret']:
-            client = Client(config['binance_api_key'], config['binance_api_secret'])
-            account = client.futures_account()
-            positions = client.futures_position_information()
-            
-            # 计算总余额
-            for asset in account['assets']:
-                if asset['asset'] == 'USDT':
-                    total_balance += float(asset['walletBalance'])
-                    daily_pnl += float(asset['unrealizedProfit'])
-            
-            # 计算持仓
-            for position in positions:
-                if float(position['positionAmt']) != 0:
-                    open_positions += 1
-                    total_position += abs(float(position['positionAmt']) * float(position['entryPrice']))
+        # 初始化总数据
+        total_balance = 0
+        total_daily_pnl = 0
+        total_positions = []
+        
+        # 遍历每个交易所的API密钥
+        for api_key in api_keys:
+            try:
+                if api_key.exchange == 'Binance':
+                    client = Client(api_key.api_key, api_key.api_secret)
+                    # 获取账户信息
+                    account = client.get_account()
+                    
+                    # 计算该交易所的余额
+                    exchange_balance = 0
+                    for asset in account['balances']:
+                        if float(asset['free']) > 0 or float(asset['locked']) > 0:
+                            if asset['asset'] == 'USDT':
+                                exchange_balance += float(asset['free']) + float(asset['locked'])
+                            else:
+                                try:
+                                    ticker = client.get_ticker(symbol=f"{asset['asset']}USDT")
+                                    price = float(ticker['lastPrice'])
+                                    exchange_balance += (float(asset['free']) + float(asset['locked'])) * price
+                                except:
+                                    continue
+                    
+                    # 获取该交易所的持仓信息
+                    exchange_positions = []
+                    for asset in account['balances']:
+                        if float(asset['free']) > 0 or float(asset['locked']) > 0:
+                            exchange_positions.append({
+                                'exchange': 'Binance',
+                                'asset': asset['asset'],
+                                'free': float(asset['free']),
+                                'locked': float(asset['locked'])
+                            })
+                    
+                    # 计算该交易所的今日盈亏
+                    today = datetime.now().date()
+                    daily_trades = TradeHistory.query.filter(
+                        TradeHistory.exchange == 'Binance',
+                        TradeHistory.timestamp >= today
+                    ).all()
+                    
+                    exchange_daily_pnl = sum(trade.price for trade in daily_trades if trade.price is not None)
+                    
+                    # 累加到总数据
+                    total_balance += exchange_balance
+                    total_daily_pnl += exchange_daily_pnl
+                    total_positions.extend(exchange_positions)
+                    
+                elif api_key.exchange == 'LBank':
+                    # 获取LBank账户信息
+                    timestamp = str(int(time.time() * 1000))
+                    params = {
+                        'api_key': api_key.api_key,
+                        'timestamp': timestamp
+                    }
+                    sign = generate_lbank_sign(params, api_key.api_secret)
+                    params['sign'] = sign
+                    
+                    response = requests.get('https://api.lbank.info/v2/user/account', params=params)
+                    account = response.json()
+                    
+                    if account['result']:
+                        # 计算该交易所的余额
+                        exchange_balance = 0
+                        for asset in account['data']:
+                            if float(asset['free']) > 0 or float(asset['freeze']) > 0:
+                                if asset['asset'] == 'usdt':
+                                    exchange_balance += float(asset['free']) + float(asset['freeze'])
+                                else:
+                                    try:
+                                        ticker = requests.get(f'https://api.lbank.info/v2/ticker.do?symbol={asset["asset"]}_usdt').json()
+                                        price = float(ticker['data'][0]['ticker']['latest'])
+                                        exchange_balance += (float(asset['free']) + float(asset['freeze'])) * price
+                                    except:
+                                        continue
+                        
+                        # 获取该交易所的持仓信息
+                        exchange_positions = []
+                        for asset in account['data']:
+                            if float(asset['free']) > 0 or float(asset['freeze']) > 0:
+                                exchange_positions.append({
+                                    'exchange': 'LBank',
+                                    'asset': asset['asset'].upper(),
+                                    'free': float(asset['free']),
+                                    'locked': float(asset['freeze'])
+                                })
+                        
+                        # 计算该交易所的今日盈亏
+                        today = datetime.now().date()
+                        daily_trades = TradeHistory.query.filter(
+                            TradeHistory.exchange == 'LBank',
+                            TradeHistory.timestamp >= today
+                        ).all()
+                        
+                        exchange_daily_pnl = sum(trade.price for trade in daily_trades if trade.price is not None)
+                        
+                        # 累加到总数据
+                        total_balance += exchange_balance
+                        total_daily_pnl += exchange_daily_pnl
+                        total_positions.extend(exchange_positions)
+                        
+            except Exception as e:
+                logger.error(f"Error getting data for {api_key.exchange}: {str(e)}")
+                continue
         
         return jsonify({
-            'balance': f"{total_balance:,.2f}",
-            'daily_pnl': f"{daily_pnl:,.2f}",
-            'open_positions': open_positions,
-            'total_position': f"{total_position:,.2f}"
+            'success': True,
+            'balance': f'${total_balance:,.2f}',
+            'daily_pnl': f'${total_daily_pnl:,.2f}',
+            'open_positions': len(total_positions),
+            'total_position': f'${total_balance:,.2f}',
+            'positions': total_positions  # 添加详细的持仓信息
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error getting account data: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # API路由：图表数据
 @app.route('/api/chart-data')
