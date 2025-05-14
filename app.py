@@ -22,7 +22,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trading.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trade.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # 初始化数据库
@@ -32,10 +32,9 @@ db = SQLAlchemy(app)
 if not os.path.exists('instance'):
     os.makedirs('instance')
 
-# 删除旧的数据库文件（如果存在）
+# 确保数据库文件路径正确
 db_path = os.path.join('instance', 'trade.db')
-if os.path.exists(db_path):
-    os.remove(db_path)
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 
 # 创建所有数据库表
 with app.app_context():
@@ -62,6 +61,11 @@ class TradeHistory(db.Model):
     status = db.Column(db.String(20), nullable=False)  # OPEN, CLOSED, CANCELLED
     strategy = db.Column(db.String(20))
     strategy_params = db.Column(db.String(255))
+
+# 重新创建所有表
+with app.app_context():
+    db.drop_all()
+    db.create_all()
 
 # 确保实例文件夹存在
 try:
@@ -210,6 +214,33 @@ def trade_history():
 # 添加获取单个交易详情的路由
 @app.route('/trade_history/<int:trade_id>')
 def get_trade_details(trade_id):
+    try:
+        trade = TradeHistory.query.get_or_404(trade_id)
+        return jsonify({
+            'success': True,
+            'trade': {
+                'id': trade.id,
+                'exchange': trade.exchange,
+                'symbol': trade.symbol,
+                'side': trade.side,
+                'price': trade.price,
+                'quantity': trade.quantity,
+                'timestamp': trade.timestamp.isoformat(),
+                'status': trade.status,
+                'strategy': trade.strategy,
+                'strategy_params': trade.strategy_params
+            }
+        })
+    except Exception as e:
+        logger.error(f"获取交易详情失败: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# 添加获取单个交易详情的API
+@app.route('/api/trades/<int:trade_id>')
+def get_trade_detail(trade_id):
     try:
         trade = TradeHistory.query.get_or_404(trade_id)
         return jsonify({

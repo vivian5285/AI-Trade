@@ -4,17 +4,15 @@
 
 {% block content %}
 <div class="container mt-5">
-    <div class="row">
-        <div class="col-md-8 offset-md-2">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
             <div class="card">
                 <div class="card-header bg-danger text-white">
                     <h4 class="mb-0">系统错误</h4>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-danger">
-                        <h5>发生错误</h5>
-                        <p>{{ error }}</p>
-                    </div>
+                    <h5 class="card-title">发生错误</h5>
+                    <p class="card-text">{{ error }}</p>
                     <p>请尝试以下操作：</p>
                     <ul>
                         <li>刷新页面</li>

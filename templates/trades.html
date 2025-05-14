@@ -160,12 +160,12 @@ document.getElementById('filterForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(this);
     const params = new URLSearchParams(formData);
-    window.location.href = `/trades?${params.toString()}`;
+    window.location.href = `/trade_history?${params.toString()}`;
 });
 
 // 显示交易详情
 function showTradeDetails(tradeId) {
-    fetch(`/trade_history/${tradeId}`)
+    fetch(`/api/trades/${tradeId}`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
