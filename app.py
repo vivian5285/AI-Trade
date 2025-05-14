@@ -28,6 +28,19 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # 初始化数据库
 db = SQLAlchemy(app)
 
+# 在创建应用实例后，确保数据库目录存在
+if not os.path.exists('instance'):
+    os.makedirs('instance')
+
+# 删除旧的数据库文件（如果存在）
+db_path = os.path.join('instance', 'trade.db')
+if os.path.exists(db_path):
+    os.remove(db_path)
+
+# 创建所有数据库表
+with app.app_context():
+    db.create_all()
+
 # API密钥模型
 class APIKey(db.Model):
     id = db.Column(db.Integer, primary_key=True)
