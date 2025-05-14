@@ -632,8 +632,8 @@ def get_settings():
 
 @app.route('/api/trading-bot/status')
 def get_trading_bot_status():
-    """获取交易机器人状态"""
     try:
+        # 检查交易机器人服务状态
         result = subprocess.run(['systemctl', 'is-active', 'trading-bot'], 
                               capture_output=True, text=True)
         is_running = result.stdout.strip() == 'active'
@@ -645,12 +645,12 @@ def get_trading_bot_status():
         return jsonify({
             'success': False,
             'error': str(e)
-        })
+        }), 500
 
 @app.route('/api/trading-bot/start', methods=['POST'])
 def start_trading_bot():
-    """启动交易机器人"""
     try:
+        # 启动交易机器人服务
         subprocess.run(['systemctl', 'start', 'trading-bot'], check=True)
         return jsonify({
             'success': True,
@@ -660,12 +660,12 @@ def start_trading_bot():
         return jsonify({
             'success': False,
             'error': str(e)
-        })
+        }), 500
 
 @app.route('/api/trading-bot/stop', methods=['POST'])
 def stop_trading_bot():
-    """停止交易机器人"""
     try:
+        # 停止交易机器人服务
         subprocess.run(['systemctl', 'stop', 'trading-bot'], check=True)
         return jsonify({
             'success': True,
@@ -675,12 +675,12 @@ def stop_trading_bot():
         return jsonify({
             'success': False,
             'error': str(e)
-        })
+        }), 500
 
 @app.route('/api/trading-bot/restart', methods=['POST'])
 def restart_trading_bot():
-    """重启交易机器人"""
     try:
+        # 重启交易机器人服务
         subprocess.run(['systemctl', 'restart', 'trading-bot'], check=True)
         return jsonify({
             'success': True,
@@ -690,7 +690,7 @@ def restart_trading_bot():
         return jsonify({
             'success': False,
             'error': str(e)
-        })
+        }), 500
 
 if __name__ == '__main__':
     # 修改为监听本地地址，让 Nginx 处理外部请求
