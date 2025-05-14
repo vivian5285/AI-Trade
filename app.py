@@ -1887,5 +1887,5 @@ def update_high_frequency_settings():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    # 修改为监听本地地址，让 Nginx 处理外部请求
-    app.run(host='127.0.0.1', port=5000, debug=False) 
+    # 确保监听所有地址
+    app.run(host='0.0.0.0', port=5000, debug=False) 
