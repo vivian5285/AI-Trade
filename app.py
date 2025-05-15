@@ -2146,7 +2146,6 @@ def create_trading_bot_page():
             exchange = request.form.get('exchange')
             symbol = request.form.get('symbol')
             strategy = request.form.get('strategy')
-            parameters = request.form.get('parameters', '{}')
             
             # 验证必填字段
             if not all([name, exchange, symbol, strategy]):
