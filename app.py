@@ -818,9 +818,32 @@ def check_api_keys():
                     if not sign:
                         raise Exception("Failed to generate LBank signature")
                     params['sign'] = sign
-                    response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-                    if not response.json()['result']:
-                        raise Exception("Invalid LBank API key")
+                    
+                    # 添加错误处理和重试逻辑
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
+                            response.raise_for_status()  # 检查HTTP错误
+                            
+                            # 尝试解析JSON响应
+                            try:
+                                data = response.json()
+                                if not data.get('result'):
+                                    raise Exception(f"LBank API error: {data.get('error_code', 'Unknown error')}")
+                                break  # 如果成功，跳出重试循环
+                            except json.JSONDecodeError as e:
+                                logger.error(f"Failed to parse LBank API response: {response.text}")
+                                if attempt == max_retries - 1:  # 最后一次尝试
+                                    raise Exception("Invalid LBank API response format")
+                                continue
+                                
+                        except requests.RequestException as e:
+                            if attempt == max_retries - 1:  # 最后一次尝试
+                                raise Exception(f"LBank API request failed: {str(e)}")
+                            time.sleep(1)  # 等待1秒后重试
+                            continue
+                            
             except Exception as e:
                 logger.error(f"Invalid API key for {key.exchange}: {str(e)}")
                 key.is_active = False
@@ -2294,9 +2317,32 @@ def check_api_keys():
                     if not sign:
                         raise Exception("Failed to generate LBank signature")
                     params['sign'] = sign
-                    response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-                    if not response.json()['result']:
-                        raise Exception("Invalid LBank API key")
+                    
+                    # 添加错误处理和重试逻辑
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
+                            response.raise_for_status()  # 检查HTTP错误
+                            
+                            # 尝试解析JSON响应
+                            try:
+                                data = response.json()
+                                if not data.get('result'):
+                                    raise Exception(f"LBank API error: {data.get('error_code', 'Unknown error')}")
+                                break  # 如果成功，跳出重试循环
+                            except json.JSONDecodeError as e:
+                                logger.error(f"Failed to parse LBank API response: {response.text}")
+                                if attempt == max_retries - 1:  # 最后一次尝试
+                                    raise Exception("Invalid LBank API response format")
+                                continue
+                                
+                        except requests.RequestException as e:
+                            if attempt == max_retries - 1:  # 最后一次尝试
+                                raise Exception(f"LBank API request failed: {str(e)}")
+                            time.sleep(1)  # 等待1秒后重试
+                            continue
+                            
             except Exception as e:
                 logger.error(f"Invalid API key for {key.exchange}: {str(e)}")
                 key.is_active = False
