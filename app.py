@@ -639,42 +639,6 @@ def get_trades():
             'error': '获取交易记录失败'
         })
 
-@app.route('/api/strategy-logs')
-def get_strategy_logs():
-    try:
-        # 获取当前选择的交易所
-        exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
-        
-        # 从交易历史中获取策略相关的交易记录，按交易所过滤
-        trades = TradeHistory.query.filter(
-            TradeHistory.strategy.isnot(None),
-            TradeHistory.exchange == exchange
-        ).order_by(TradeHistory.timestamp.desc()).limit(100).all()
-        
-        logs = []
-        for trade in trades:
-            logs.append({
-                'timestamp': trade.timestamp.isoformat(),
-                'strategy': trade.strategy,
-                'symbol': trade.symbol,
-                'signal': trade.side,  # BUY 或 SELL
-                'price': trade.price,
-                'quantity': trade.quantity,
-                'status': trade.status,
-                'strategy_params': trade.strategy_params
-            })
-        
-        return jsonify({
-            'success': True,
-            'logs': logs
-        })
-    except Exception as e:
-        logger.error(f"Error getting strategy logs: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
 @app.route('/api/chart-data')
 @handle_errors
 @log_request
