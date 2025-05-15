@@ -18,6 +18,7 @@ import signal
 from functools import lru_cache, wraps
 from trading_bot_manager import trading_bot_manager
 from flask_migrate import Migrate
+from urllib.parse import urlencode
 
 # 加载环境变量
 load_dotenv()
@@ -798,8 +799,15 @@ def check_api_keys():
         for key in active_keys:
             try:
                 if key.exchange == 'Binance':
-                    client = Client(key.api_key, key.api_secret)
-                    client.get_account()
+                    try:
+                        client = Client(key.api_key, key.api_secret)
+                        client.get_account()
+                    except Exception as e:
+                        if "restricted location" in str(e).lower():
+                            logger.warning("Binance API is restricted in this location, but keeping the key active")
+                            continue
+                        else:
+                            raise e
                 elif key.exchange == 'LBank':
                     timestamp = str(int(time.time() * 1000))
                     params = {
@@ -807,6 +815,8 @@ def check_api_keys():
                         'timestamp': timestamp
                     }
                     sign = generate_lbank_sign(params, key.api_secret)
+                    if not sign:
+                        raise Exception("Failed to generate LBank signature")
                     params['sign'] = sign
                     response = requests.get('https://api.lbank.info/v2/user/account', params=params)
                     if not response.json()['result']:
@@ -2234,6 +2244,76 @@ def get_account_data():
             message="获取账户数据失败",
             status_code=500
         )
+
+def generate_lbank_sign(params, secret_key):
+    """生成 LBank API 签名"""
+    try:
+        # 将参数按键排序
+        sorted_params = sorted(params.items(), key=lambda x: x[0])
+        # 构建签名字符串
+        sign_str = '&'.join([f"{k}={v}" for k, v in sorted_params])
+        # 使用 HMAC-SHA256 生成签名
+        signature = hmac.new(
+            secret_key.encode('utf-8'),
+            sign_str.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        return signature
+    except Exception as e:
+        logger.error(f"Error generating LBank sign: {str(e)}")
+        return None
+
+def check_api_keys():
+    try:
+        # 检查是否有活跃的API密钥
+        active_keys = APIKey.query.filter_by(is_active=True).all()
+        if not active_keys:
+            logger.warning("No active API keys found")
+            return False
+            
+        # 检查每个API密钥是否有效
+        for key in active_keys:
+            try:
+                if key.exchange == 'Binance':
+                    try:
+                        client = Client(key.api_key, key.api_secret)
+                        client.get_account()
+                    except Exception as e:
+                        if "restricted location" in str(e).lower():
+                            logger.warning("Binance API is restricted in this location, but keeping the key active")
+                            continue
+                        else:
+                            raise e
+                elif key.exchange == 'LBank':
+                    timestamp = str(int(time.time() * 1000))
+                    params = {
+                        'api_key': key.api_key,
+                        'timestamp': timestamp
+                    }
+                    sign = generate_lbank_sign(params, key.api_secret)
+                    if not sign:
+                        raise Exception("Failed to generate LBank signature")
+                    params['sign'] = sign
+                    response = requests.get('https://api.lbank.info/v2/user/account', params=params)
+                    if not response.json()['result']:
+                        raise Exception("Invalid LBank API key")
+            except Exception as e:
+                logger.error(f"Invalid API key for {key.exchange}: {str(e)}")
+                key.is_active = False
+                db.session.commit()
+                continue
+                
+        return True
+    except Exception as e:
+        logger.error(f"Error checking API keys: {str(e)}")
+        return False
+
+# 在应用启动时检查API密钥
+@app.before_request
+def before_request():
+    if not hasattr(app, 'has_checked_api_keys'):
+        app.has_checked_api_keys = True
+        check_api_keys()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
