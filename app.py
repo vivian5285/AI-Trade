@@ -277,29 +277,42 @@ with app.app_context():
         if not all([binance_api_key, binance_api_secret, lbank_api_key, lbank_api_secret]):
             logger.warning("Some API keys are missing in .env file")
         
-        # 添加Binance默认密钥
-        binance_key = APIKey(
-            exchange='Binance',
-            api_key=binance_api_key or '',
-            api_secret=binance_api_secret or '',
-            is_active=True
-        )
-        db.session.add(binance_key)
-        
-        # 添加LBank默认密钥
-        lbank_key = APIKey(
-            exchange='LBank',
-            api_key=lbank_api_key or '',
-            api_secret=lbank_api_secret or '',
-            is_active=True
-        )
-        db.session.add(lbank_key)
-        
         try:
+            # 添加Binance默认密钥
+            if binance_api_key and binance_api_secret:
+                binance_key = APIKey(
+                    exchange='Binance',
+                    api_key=binance_api_key,
+                    api_secret=binance_api_secret,
+                    is_active=True
+                )
+                db.session.add(binance_key)
+            
+            # 添加LBank默认密钥
+            if lbank_api_key and lbank_api_secret:
+                lbank_key = APIKey(
+                    exchange='LBank',
+                    api_key=lbank_api_key,
+                    api_secret=lbank_api_secret,
+                    is_active=True
+                )
+                db.session.add(lbank_key)
+            
             db.session.commit()
             logger.info("Successfully initialized database with API keys")
         except Exception as e:
             logger.error(f"Error initializing database: {str(e)}")
+            db.session.rollback()
+    else:
+        # 更新现有API密钥的状态
+        try:
+            api_keys = APIKey.query.all()
+            for key in api_keys:
+                key.is_active = True
+            db.session.commit()
+            logger.info("Successfully updated API key status")
+        except Exception as e:
+            logger.error(f"Error updating API key status: {str(e)}")
             db.session.rollback()
 
 # 添加全局变量来跟踪交易机器人进程
