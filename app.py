@@ -302,7 +302,22 @@ def index():
 def dashboard():
     try:
         api_keys = APIKey.query.all()
-        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(10).all()
+        # 修改查询，不包含 bot_id 列
+        trades = db.session.query(
+            TradeHistory.id,
+            TradeHistory.exchange,
+            TradeHistory.symbol,
+            TradeHistory.side,
+            TradeHistory.position_type,
+            TradeHistory.price,
+            TradeHistory.quantity,
+            TradeHistory.timestamp,
+            TradeHistory.status,
+            TradeHistory.strategy,
+            TradeHistory.strategy_params,
+            TradeHistory.pnl,
+            TradeHistory.pnl_percentage
+        ).order_by(TradeHistory.timestamp.desc()).limit(10).all()
         return render_template('dashboard.html', api_keys=api_keys, trades=trades)
     except Exception as e:
         logger.error(f"Error in dashboard route: {str(e)}")
@@ -1473,24 +1488,53 @@ def execute_high_frequency_trade(exchange, symbol, side, quantity, price, strate
 @app.route('/high-frequency')
 def high_frequency():
     try:
-        # 获取当前设置
+        # 检查数据库连接
+        try:
+            db.session.execute('SELECT 1')
+        except Exception as e:
+            logger.error(f"数据库连接错误: {str(e)}")
+            return render_template('error.html', error="数据库连接失败，请检查数据库配置")
+
+        # 获取当前设置，使用默认值
         settings = {
             'trading_pair': os.getenv('TRADING_PAIR', 'BTCUSDT'),
-            'leverage': os.getenv('LEVERAGE', '20'),
-            'min_position': os.getenv('MIN_POSITION', '10'),
-            'max_position': os.getenv('MAX_POSITION', '1000'),
-            'stop_loss': os.getenv('STOP_LOSS_PERCENTAGE', '1'),
-            'take_profit': os.getenv('TAKE_PROFIT_PERCENTAGE', '2'),
-            'max_daily_trades': os.getenv('MAX_DAILY_TRADES', '1000')
+            'leverage': int(os.getenv('LEVERAGE', '20')),
+            'min_position': float(os.getenv('MIN_POSITION', '10')),
+            'max_position': float(os.getenv('MAX_POSITION', '1000')),
+            'stop_loss': float(os.getenv('STOP_LOSS_PERCENTAGE', '1')),
+            'take_profit': float(os.getenv('TAKE_PROFIT_PERCENTAGE', '2')),
+            'max_daily_trades': int(os.getenv('MAX_DAILY_TRADES', '1000'))
         }
         
         # 获取最近的交易记录
-        trades = TradeHistory.query.filter_by(strategy='high_frequency').order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        try:
+            trades = TradeHistory.query.filter_by(strategy='high_frequency').order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        except Exception as e:
+            logger.error(f"获取交易记录失败: {str(e)}")
+            trades = []
         
-        return render_template('high_frequency.html', settings=settings, trades=trades)
+        # 获取账户信息
+        try:
+            account_info = get_account_balance(os.getenv('CURRENT_EXCHANGE', 'binance'))
+        except Exception as e:
+            logger.error(f"获取账户信息失败: {str(e)}")
+            account_info = None
+        
+        # 获取市场状态
+        try:
+            market_state = analyze_market_conditions(settings['trading_pair'])
+        except Exception as e:
+            logger.error(f"获取市场状态失败: {str(e)}")
+            market_state = None
+        
+        return render_template('high_frequency.html', 
+                             settings=settings, 
+                             trades=trades,
+                             account_info=account_info,
+                             market_state=market_state)
     except Exception as e:
-        logger.error(f"Error loading high frequency page: {str(e)}")
-        return render_template('error.html', error="加载高频交易页面时出错")
+        logger.error(f"加载高频交易页面时出错: {str(e)}")
+        return render_template('error.html', error="加载高频交易页面时出错，请检查系统日志")
 
 @app.route('/api/high-frequency/start', methods=['POST'])
 @handle_errors
