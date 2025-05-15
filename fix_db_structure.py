@@ -9,7 +9,7 @@ def fix_database():
     if os.path.exists(db_path):
         backup_path = f"{db_path}.backup"
         os.rename(db_path, backup_path)
-        print(f"Created backup at {backup_path}")
+        print(f"已创建备份文件: {backup_path}")
     
     # 创建新的数据库连接
     conn = sqlite3.connect(db_path)
@@ -20,15 +20,34 @@ def fix_database():
         cursor.execute('''
         CREATE TABLE trade_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bot_id INTEGER,
             exchange VARCHAR(50) NOT NULL,
             symbol VARCHAR(20) NOT NULL,
             side VARCHAR(10) NOT NULL,
+            position_type VARCHAR(10) NOT NULL,
             price DECIMAL(20, 8) NOT NULL,
             quantity DECIMAL(20, 8) NOT NULL,
             timestamp DATETIME NOT NULL,
             status VARCHAR(20) NOT NULL,
             strategy VARCHAR(50),
-            strategy_params TEXT
+            strategy_params TEXT,
+            pnl DECIMAL(20, 8),
+            pnl_percentage DECIMAL(20, 8),
+            FOREIGN KEY (bot_id) REFERENCES trading_bot_config(id)
+        )
+        ''')
+        
+        # 创建 trading_bot_config 表
+        cursor.execute('''
+        CREATE TABLE trading_bot_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(50) NOT NULL,
+            exchange VARCHAR(50) NOT NULL,
+            symbol VARCHAR(20) NOT NULL,
+            strategy VARCHAR(50) NOT NULL,
+            parameters TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         ''')
         
@@ -45,18 +64,18 @@ def fix_database():
         
         # 提交更改
         conn.commit()
-        print("Database structure fixed successfully")
+        print("数据库结构修复成功")
         
     except Exception as e:
-        print(f"Error fixing database: {str(e)}")
+        print(f"修复数据库时出错: {str(e)}")
         # 如果出错，恢复备份
         if os.path.exists(backup_path):
             os.remove(db_path)
             os.rename(backup_path, db_path)
-            print("Restored database from backup")
+            print("已从备份恢复数据库")
     
     finally:
         conn.close()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     fix_database() 
