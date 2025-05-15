@@ -27,11 +27,6 @@ def upgrade():
             ELSE 'UNKNOWN'
         END
     """)
-    
-    # 将列设置为非空
-    op.alter_column('trade_history', 'position_type',
-                    existing_type=sa.String(10),
-                    nullable=False)
 
 def downgrade():
     # 删除 position_type 列
