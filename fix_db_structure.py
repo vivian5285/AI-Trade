@@ -1,81 +1,50 @@
 import sqlite3
 import os
+import shutil
+from datetime import datetime
+
+def backup_database():
+    """备份数据库文件"""
+    db_path = 'instance/trade.db'
+    if os.path.exists(db_path):
+        backup_path = f'instance/trade_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.db'
+        shutil.copy2(db_path, backup_path)
+        print(f"数据库已备份到: {backup_path}")
+        return True
+    return False
 
 def fix_database():
-    # 数据库文件路径
-    db_path = 'instance/trade.db'
-    
-    # 如果数据库文件存在，先备份
-    if os.path.exists(db_path):
-        backup_path = f"{db_path}.backup"
-        os.rename(db_path, backup_path)
-        print(f"已创建备份文件: {backup_path}")
-    
-    # 创建新的数据库连接
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
+    """修复数据库结构"""
     try:
-        # 创建 trade_history 表
+        # 备份数据库
+        if not backup_database():
+            print("无法备份数据库，请确保数据库文件存在")
+            return False
+
+        # 连接到数据库
+        conn = sqlite3.connect('instance/trade.db')
+        cursor = conn.cursor()
+
+        # 添加bot_id列到trade_history表
         cursor.execute('''
-        CREATE TABLE trade_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bot_id INTEGER,
-            exchange VARCHAR(50) NOT NULL,
-            symbol VARCHAR(20) NOT NULL,
-            side VARCHAR(10) NOT NULL,
-            position_type VARCHAR(10) NOT NULL,
-            price DECIMAL(20, 8) NOT NULL,
-            quantity DECIMAL(20, 8) NOT NULL,
-            timestamp DATETIME NOT NULL,
-            status VARCHAR(20) NOT NULL,
-            strategy VARCHAR(50),
-            strategy_params TEXT,
-            pnl DECIMAL(20, 8),
-            pnl_percentage DECIMAL(20, 8),
-            FOREIGN KEY (bot_id) REFERENCES trading_bot_config(id)
-        )
+            ALTER TABLE trade_history 
+            ADD COLUMN bot_id INTEGER REFERENCES trading_bot_config(id)
         ''')
-        
-        # 创建 trading_bot_config 表
-        cursor.execute('''
-        CREATE TABLE trading_bot_config (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name VARCHAR(50) NOT NULL,
-            exchange VARCHAR(50) NOT NULL,
-            symbol VARCHAR(20) NOT NULL,
-            strategy VARCHAR(50) NOT NULL,
-            parameters TEXT,
-            is_active BOOLEAN NOT NULL DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-        
-        # 创建 api_key 表
-        cursor.execute('''
-        CREATE TABLE api_key (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            exchange VARCHAR(50) NOT NULL,
-            api_key VARCHAR(255) NOT NULL,
-            api_secret VARCHAR(255) NOT NULL,
-            is_active BOOLEAN NOT NULL DEFAULT 1
-        )
-        ''')
-        
+
         # 提交更改
         conn.commit()
-        print("数据库结构修复成功")
-        
+        print("成功添加bot_id列到trade_history表")
+
+        # 关闭连接
+        conn.close()
+        return True
+
     except Exception as e:
         print(f"修复数据库时出错: {str(e)}")
-        # 如果出错，恢复备份
-        if os.path.exists(backup_path):
-            os.remove(db_path)
-            os.rename(backup_path, db_path)
-            print("已从备份恢复数据库")
-    
-    finally:
-        conn.close()
+        return False
 
-if __name__ == "__main__":
-    fix_database() 
+if __name__ == '__main__':
+    if fix_database():
+        print("数据库结构修复成功")
+    else:
+        print("数据库结构修复失败") 

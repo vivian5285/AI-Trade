@@ -1685,51 +1685,39 @@ def get_trading_bots():
         )
 
 @app.route('/api/trading-bots', methods=['POST'])
-@handle_errors
-@log_request
-@validate_params('name', 'exchange', 'trading_pair', 'strategies', 'funds', 'leverage', 'stop_loss', 'take_profit', 'max_daily_trades')
 def create_trading_bot_api():
+    """创建交易机器人的API端点"""
     try:
-        data = request.json
-        
-        # 验证数据
-        if not validate_bot_data(data):
-            return api_response(
-                success=False,
-                error="无效的机器人参数",
-                message="请检查机器人参数是否正确",
-                status_code=400
-            )
-        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': '无效的请求数据'}), 400
+
+        # 验证必填字段
+        required_fields = ['name', 'exchange', 'symbol', 'strategy']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'缺少必填字段: {field}'}), 400
+
         # 创建新的交易机器人配置
         new_bot = TradingBotConfig(
             name=data['name'],
             exchange=data['exchange'],
-            trading_pair=data['trading_pair'],
-            status='STOPPED',
-            strategies=json.dumps(data['strategies']),
-            funds=data['funds'],
-            leverage=data['leverage'],
-            stop_loss=data['stop_loss'],
-            take_profit=data['take_profit'],
-            max_daily_trades=data['max_daily_trades']
+            symbol=data['symbol'],
+            strategy=data['strategy'],
+            parameters=json.dumps(data.get('parameters', {})),
+            is_active=data.get('is_active', True)
         )
-        
         db.session.add(new_bot)
         db.session.commit()
-        
-        return api_response(
-            message="交易机器人创建成功"
-        )
+
+        return jsonify({
+            'message': '交易机器人创建成功',
+            'bot_id': new_bot.id
+        }), 201
+
     except Exception as e:
-        logger.error(f"Error creating trading bot: {str(e)}")
         db.session.rollback()
-        return api_response(
-            success=False,
-            error=str(e),
-            message="创建交易机器人失败",
-            status_code=500
-        )
+        return jsonify({'error': f'创建交易机器人失败: {str(e)}'}), 500
 
 @app.route('/api/trading-bots/<int:bot_id>', methods=['GET'])
 def get_trading_bot(bot_id):
@@ -2061,38 +2049,53 @@ def trading_bots():
         logger.error(f"Error loading trading bots page: {str(e)}")
         return render_template('error.html', error=str(e)), 500
 
-# 路由：创建交易机器人页面
-@app.route('/trading-bots/create')
-def create_trading_bot_page_view():
-    try:
-        return render_template('create_trading_bot.html')
-    except Exception as e:
-        logger.error(f"Error loading create trading bot page: {str(e)}")
-        return render_template('error.html', error=str(e)), 500
-
-# 路由：单个交易机器人页面
-@app.route('/trading-bots/<int:bot_id>')
-def trading_bot_detail(bot_id):
-    try:
-        bot = TradingBotConfig.query.get_or_404(bot_id)
-        # 获取机器人的交易历史
-        trades = TradeHistory.query.filter_by(bot_id=bot_id).order_by(TradeHistory.timestamp.desc()).limit(50).all()
-        # 获取策略设置
-        settings = {
-            'rsi_period': 14,
-            'rsi_overbought': 70,
-            'rsi_oversold': 30,
-            'bb_period': 20,
-            'bb_std': 2.0,
-            'supertrend_atr_period': 10,
-            'supertrend_atr_multiplier': 3.0,
-            'grid_count': 10,
-            'grid_spacing': 0.5
-        }
-        return render_template('trading_bot.html', bot=bot, trades=trades, settings=settings)
-    except Exception as e:
-        logger.error(f"Error loading trading bot detail page: {str(e)}")
-        return render_template('error.html', error=str(e)), 500
+@app.route('/create-trading-bot', methods=['GET', 'POST'])
+def create_trading_bot_page():
+    """创建交易机器人的页面路由"""
+    if request.method == 'POST':
+        try:
+            # 获取表单数据
+            name = request.form.get('name')
+            exchange = request.form.get('exchange')
+            symbol = request.form.get('symbol')
+            strategy = request.form.get('strategy')
+            parameters = request.form.get('parameters', '{}')
+            
+            # 验证必填字段
+            data = request.form
+            
+            # 验证数据
+            if not validate_bot_data(data):
+                flash('无效的机器人参数', 'error')
+                return redirect(url_for('create_trading_bot_page'))
+            
+            # 创建新的交易机器人配置
+            new_bot = TradingBotConfig(
+                name=data['name'],
+                exchange=data['exchange'],
+                trading_pair=data['trading_pair'],
+                status='STOPPED',
+                strategies=json.dumps(data['strategies']),
+                funds=float(data['funds']),
+                leverage=int(data['leverage']),
+                stop_loss=float(data['stop_loss']),
+                take_profit=float(data['take_profit']),
+                max_daily_trades=int(data['max_daily_trades'])
+            )
+            
+            db.session.add(new_bot)
+            db.session.commit()
+            
+            flash('交易机器人创建成功', 'success')
+            return redirect(url_for('trading_bots'))
+            
+        except Exception as e:
+            logger.error(f"创建交易机器人失败: {str(e)}")
+            db.session.rollback()
+            flash('创建交易机器人失败', 'error')
+            return redirect(url_for('create_trading_bot_page'))
+    
+    return render_template('create_trading_bot.html')
 
 @app.route('/api/bot/logs/<int:bot_id>')
 @handle_errors
