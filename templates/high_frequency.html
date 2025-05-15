@@ -32,9 +32,9 @@
                         <h6>市场状态</h6>
                         <div id="market-state" class="alert alert-secondary">
                             {% if market_state %}
-                                <div>波动率: {{ "%.2f"|format(market_state.volatility * 100) }}%</div>
-                                <div>趋势强度: {{ "%.2f"|format(market_state.trend_strength * 100) }}%</div>
-                                <div>成交量: {{ market_state.volume }}</div>
+                                <div>趋势强度: {{ "%.1f"|format(market_state.trend_strength * 100) }}%</div>
+                                <div>波动性: {{ "%.1f"|format(market_state.volatility * 100) }}%</div>
+                                <div>成交量: {{ "%.1f"|format(market_state.volume_ratio * 100) }}%</div>
                             {% else %}
                                 加载中...
                             {% endif %}
@@ -44,9 +44,9 @@
                         <h6>账户信息</h6>
                         <div id="account-info" class="alert alert-secondary">
                             {% if account_info %}
-                                <div>总权益: {{ "%.2f"|format(account_info.total_balance) }} USDT</div>
-                                <div>可用余额: {{ "%.2f"|format(account_info.available_balance) }} USDT</div>
-                                <div>未实现盈亏: {{ "%.2f"|format(account_info.unrealized_pnl) }} USDT</div>
+                                <div>总资产: ${{ "%.2f"|format(account_info.total_balance) }}</div>
+                                <div>可用余额: ${{ "%.2f"|format(account_info.available_balance) }}</div>
+                                <div>未实现盈亏: ${{ "%.2f"|format(account_info.unrealized_pnl) }}</div>
                             {% else %}
                                 加载中...
                             {% endif %}
@@ -425,20 +425,85 @@ $(document).ready(function() {
         });
     });
 
-    // 定期更新状态
-    function updateStatus() {
-        $.get('/api/high-frequency/status', function(response) {
-            if (response.success) {
-                const data = response.data;
-                $('#current-signal').text(data.current_signal || '等待信号...');
-                $('#market-state').text(data.market_state || '加载中...');
-                $('#account-info').text(data.account_info || '加载中...');
-            }
-        });
+    // 更新高频交易状态
+    function updateHighFrequencyStatus() {
+        fetch('/api/high-frequency-status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const status = data.data;
+                    
+                    // 更新交易状态
+                    document.getElementById('trading-status').textContent = 
+                        status.is_running ? '运行中' : '已停止';
+                    
+                    // 更新当前信号
+                    const signalElement = document.getElementById('current-signal');
+                    if (status.current_signal) {
+                        signalElement.textContent = `${status.current_signal.signal} (强度: ${(status.current_signal.strength * 100).toFixed(1)}%)`;
+                        signalElement.className = status.current_signal.signal === 'BUY' ? 'text-success' : 'text-danger';
+                    } else {
+                        signalElement.textContent = '等待信号...';
+                        signalElement.className = 'text-muted';
+                    }
+                    
+                    // 更新市场状态
+                    const marketState = status.market_state;
+                    document.getElementById('market-state').innerHTML = `
+                        <div>趋势强度: ${(marketState.trend_strength * 100).toFixed(1)}%</div>
+                        <div>波动性: ${(marketState.volatility * 100).toFixed(1)}%</div>
+                        <div>成交量: ${(marketState.volume_ratio * 100).toFixed(1)}%</div>
+                    `;
+                    
+                    // 更新账户信息
+                    const accountInfo = status.account_info;
+                    document.getElementById('account-info').innerHTML = `
+                        <div>总资产: $${accountInfo.total_balance.toFixed(2)}</div>
+                        <div>可用余额: $${accountInfo.available_balance.toFixed(2)}</div>
+                        <div>未实现盈亏: $${accountInfo.unrealized_pnl.toFixed(2)}</div>
+                    `;
+                    
+                    // 更新交易统计
+                    document.getElementById('total-trades').textContent = status.total_trades;
+                    document.getElementById('win-rate').textContent = `${status.win_rate.toFixed(1)}%`;
+                    document.getElementById('total-profit').textContent = `$${status.total_profit.toFixed(2)}`;
+                    
+                    // 更新最近交易
+                    const tradesTable = document.getElementById('recent-trades');
+                    if (status.recent_trades.length > 0) {
+                        tradesTable.innerHTML = status.recent_trades.map(trade => `
+                            <tr>
+                                <td>${new Date(trade.timestamp).toLocaleString()}</td>
+                                <td class="${trade.side === 'BUY' ? 'text-success' : 'text-danger'}">
+                                    ${trade.side === 'BUY' ? '买入' : '卖出'}
+                                </td>
+                                <td>$${parseFloat(trade.price).toFixed(2)}</td>
+                                <td>${parseFloat(trade.quantity).toFixed(4)}</td>
+                                <td class="${trade.pnl >= 0 ? 'text-success' : 'text-danger'}">
+                                    $${parseFloat(trade.pnl).toFixed(2)}
+                                </td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        tradesTable.innerHTML = '<tr><td colspan="5" class="text-center">暂无交易记录</td></tr>';
+                    }
+                } else {
+                    console.error('获取高频交易状态失败:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('更新高频交易状态失败:', error);
+            });
     }
 
-    // 每5秒更新一次状态
-    setInterval(updateStatus, 5000);
+    // 页面加载完成后开始定时更新
+    document.addEventListener('DOMContentLoaded', function() {
+        // 立即更新一次
+        updateHighFrequencyStatus();
+        
+        // 每5秒更新一次
+        setInterval(updateHighFrequencyStatus, 5000);
+    });
 
     // 更新机器人状态
     function updateBotStatus() {
@@ -544,7 +609,6 @@ $(document).ready(function() {
     }
 
     // 初始化
-    updateStatus();
     updateBotStatus();
 });
 </script>

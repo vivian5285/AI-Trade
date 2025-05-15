@@ -173,70 +173,162 @@ function updateAccountData() {
     fetch('/api/account-data')
         .then(response => response.json())
         .then(data => {
-            if (data.error) {
+            if (!data.success) {
                 console.error('Error fetching account data:', data.error);
                 return;
             }
             
             // 更新总余额
             document.getElementById('total-balance').textContent = 
-                `$${data.total_balance.toFixed(2)}`;
+                `$${data.data.total_balance.toFixed(2)}`;
             
             // 更新今日盈亏
             const dailyPnlElement = document.getElementById('daily-pnl');
-            dailyPnlElement.textContent = `$${data.daily_pnl.toFixed(2)}`;
-            dailyPnlElement.className = data.daily_pnl >= 0 ? 'text-success' : 'text-danger';
+            dailyPnlElement.textContent = `$${data.data.daily_pnl.toFixed(2)}`;
+            dailyPnlElement.className = data.data.daily_pnl >= 0 ? 'text-success' : 'text-danger';
             
             // 更新未实现盈亏
             const unrealizedPnlElement = document.getElementById('unrealized-pnl');
-            unrealizedPnlElement.textContent = `$${data.unrealized_pnl.toFixed(2)}`;
-            unrealizedPnlElement.className = data.unrealized_pnl >= 0 ? 'text-success' : 'text-danger';
+            unrealizedPnlElement.textContent = `$${data.data.unrealized_pnl.toFixed(2)}`;
+            unrealizedPnlElement.className = data.data.unrealized_pnl >= 0 ? 'text-success' : 'text-danger';
             
             // 更新持仓数量
             document.getElementById('position-count').textContent = 
-                data.positions.length;
+                data.data.positions.length;
             
             // 更新持仓列表
             const positionsTable = document.getElementById('positions-table');
-            positionsTable.innerHTML = `
-                <thead>
-                    <tr>
-                        <th>交易对</th>
-                        <th>方向</th>
-                        <th>数量</th>
-                        <th>杠杆</th>
-                        <th>开仓价</th>
-                        <th>标记价</th>
-                        <th>未实现盈亏</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${data.positions.map(position => `
+            if (data.data.positions.length > 0) {
+                positionsTable.innerHTML = `
+                    <thead>
                         <tr>
-                            <td>${position.symbol}</td>
-                            <td class="${position.side === 'LONG' ? 'text-success' : 'text-danger'}">
-                                ${position.side}
-                            </td>
-                            <td>${Math.abs(position.amount).toFixed(4)}</td>
-                            <td>${position.leverage}x</td>
-                            <td>$${position.entry_price.toFixed(2)}</td>
-                            <td>$${position.mark_price.toFixed(2)}</td>
-                            <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
-                                $${position.unrealized_pnl.toFixed(2)}
-                            </td>
+                            <th>交易对</th>
+                            <th>方向</th>
+                            <th>数量</th>
+                            <th>杠杆</th>
+                            <th>开仓价</th>
+                            <th>标记价</th>
+                            <th>未实现盈亏</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            `;
+                    </thead>
+                    <tbody>
+                        ${data.data.positions.map(position => `
+                            <tr>
+                                <td>${position.symbol}</td>
+                                <td class="${position.side === 'LONG' ? 'text-success' : 'text-danger'}">
+                                    ${position.side}
+                                </td>
+                                <td>${Math.abs(position.amount).toFixed(4)}</td>
+                                <td>${position.leverage}x</td>
+                                <td>$${position.entry_price.toFixed(2)}</td>
+                                <td>$${position.mark_price.toFixed(2)}</td>
+                                <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
+                                    $${position.unrealized_pnl.toFixed(2)}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                `;
+            } else {
+                positionsTable.innerHTML = `
+                    <tbody>
+                        <tr>
+                            <td colspan="7" class="text-center">暂无持仓</td>
+                        </tr>
+                    </tbody>
+                `;
+            }
         })
         .catch(error => {
             console.error('Error:', error);
+            // 显示错误信息
+            document.getElementById('total-balance').textContent = '$0.00';
+            document.getElementById('daily-pnl').textContent = '加载失败';
+            document.getElementById('unrealized-pnl').textContent = '$0.00';
+            document.getElementById('position-count').textContent = '0';
+            document.getElementById('positions-table').innerHTML = `
+                <tbody>
+                    <tr>
+                        <td colspan="7" class="text-center">加载失败</td>
+                    </tr>
+                </tbody>
+            `;
+        });
+}
+
+// 更新交易历史
+function updateTradeHistory() {
+    fetch('/api/trades')
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                console.error('Error fetching trades:', data.error);
+                return;
+            }
+            
+            const tradesTable = document.getElementById('trades-table');
+            if (data.data.trades.length > 0) {
+                tradesTable.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>交易所</th>
+                            <th>交易对</th>
+                            <th>方向</th>
+                            <th>价格</th>
+                            <th>数量</th>
+                            <th>状态</th>
+                            <th>策略</th>
+                            <th>盈亏</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.data.trades.map(trade => `
+                            <tr>
+                                <td>${trade.timestamp}</td>
+                                <td>${trade.exchange}</td>
+                                <td>${trade.symbol}</td>
+                                <td class="${trade.side === 'BUY' ? 'text-success' : 'text-danger'}">
+                                    ${trade.side}
+                                </td>
+                                <td>$${trade.price.toFixed(2)}</td>
+                                <td>${trade.quantity.toFixed(4)}</td>
+                                <td>${trade.status}</td>
+                                <td>${trade.strategy || '-'}</td>
+                                <td class="${trade.pnl >= 0 ? 'text-success' : 'text-danger'}">
+                                    $${trade.pnl.toFixed(2)}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                `;
+            } else {
+                tradesTable.innerHTML = `
+                    <tbody>
+                        <tr>
+                            <td colspan="9" class="text-center">暂无交易记录</td>
+                        </tr>
+                    </tbody>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('trades-table').innerHTML = `
+                <tbody>
+                    <tr>
+                        <td colspan="9" class="text-center">加载失败</td>
+                    </tr>
+                </tbody>
+            `;
         });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     updateAccountData();
-    setInterval(updateAccountData, 10000); // 每10秒刷新一次
+    updateTradeHistory();
+    setInterval(updateAccountData, 10000); // 每10秒刷新一次账户数据
+    setInterval(updateTradeHistory, 30000); // 每30秒刷新一次交易历史
 });
 </script>
 {% endblock %}

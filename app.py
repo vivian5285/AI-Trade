@@ -80,13 +80,34 @@ def load_config():
 def get_high_frequency_trading_status():
     """获取高频交易状态"""
     try:
+        # 获取当前交易所
+        exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
+        
+        # 获取账户信息
+        account_info = get_account_balance(exchange)
+        if not account_info:
+            raise Exception("Failed to get account information")
+            
+        # 获取市场状态
+        market_state = analyze_market_conditions('BTCUSDT')  # 默认使用BTCUSDT
+        if not market_state:
+            raise Exception("Failed to analyze market conditions")
+            
         # 获取最近的交易记录
-        trades = TradeHistory.query.filter_by(strategy='high_frequency').order_by(TradeHistory.timestamp.desc()).limit(10).all()
+        trades = TradeHistory.query.filter_by(
+            exchange=exchange,
+            strategy='high_frequency'
+        ).order_by(TradeHistory.timestamp.desc()).limit(10).all()
         
         # 计算统计数据
         total_trades = len(trades)
         winning_trades = sum(1 for trade in trades if trade.pnl > 0)
         total_profit = sum(trade.pnl for trade in trades)
+        
+        # 获取当前信号
+        current_signal = None
+        if market_state['trend_strength'] > 0.7:  # 趋势强度大于0.7时生成信号
+            current_signal = check_high_frequency_strategy('BTCUSDT')
         
         return {
             'is_running': True,  # 这里需要根据实际情况判断
@@ -94,6 +115,13 @@ def get_high_frequency_trading_status():
             'winning_trades': winning_trades,
             'win_rate': (winning_trades / total_trades * 100) if total_trades > 0 else 0,
             'total_profit': total_profit,
+            'market_state': market_state,
+            'account_info': {
+                'total_balance': account_info['total_balance'],
+                'available_balance': account_info['available_balance'],
+                'unrealized_pnl': account_info['unrealized_pnl']
+            },
+            'current_signal': current_signal,
             'recent_trades': [
                 {
                     'id': trade.id,
@@ -573,48 +601,79 @@ def update_settings():
         )
 
 @app.route('/api/trades')
-@handle_errors
-@log_request
 def get_trades():
     try:
-        # 获取所有交易记录，按时间倒序排列，并关联机器人信息
-        trades = db.session.query(
-            TradeHistory,
-            TradingBotConfig.name.label('bot_name')
-        ).outerjoin(
-            TradingBotConfig,
-            TradeHistory.bot_id == TradingBotConfig.id
-        ).order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        # 获取当前选择的交易所
+        exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
         
-        return api_response(
-            data={
-                'trades': [{
-                    'id': trade.TradeHistory.id,
-                    'bot_id': trade.TradeHistory.bot_id,
-                    'bot_name': trade.bot_name,
-                    'exchange': trade.TradeHistory.exchange,
-                    'symbol': trade.TradeHistory.symbol,
-                    'side': trade.TradeHistory.side,
-                    'position_type': trade.TradeHistory.position_type,
-                    'price': trade.TradeHistory.price,
-                    'quantity': trade.TradeHistory.quantity,
-                    'timestamp': trade.TradeHistory.timestamp.isoformat(),
-                    'status': trade.TradeHistory.status,
-                    'strategy': trade.TradeHistory.strategy,
-                    'strategy_params': trade.TradeHistory.strategy_params,
-                    'pnl': trade.TradeHistory.pnl,
-                    'pnl_percentage': trade.TradeHistory.pnl_percentage
-                } for trade in trades]
+        # 获取最近的50条交易记录，按交易所过滤
+        trades = TradeHistory.query.filter_by(exchange=exchange).order_by(TradeHistory.timestamp.desc()).limit(50).all()
+        
+        # 处理交易记录
+        trade_list = []
+        for trade in trades:
+            trade_data = {
+                'timestamp': trade.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'exchange': trade.exchange,
+                'symbol': trade.symbol,
+                'side': trade.side,
+                'price': float(trade.price),
+                'quantity': float(trade.quantity),
+                'status': trade.status,
+                'strategy': trade.strategy,
+                'pnl': float(trade.pnl) if trade.pnl is not None else 0.0,
+                'pnl_percentage': float(trade.pnl_percentage) if trade.pnl_percentage is not None else 0.0
             }
-        )
+            trade_list.append(trade_data)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'trades': trade_list
+            }
+        })
     except Exception as e:
-        logger.error(f"Error getting trades: {str(e)}")
-        return api_response(
-            success=False,
-            error=str(e),
-            message="获取交易历史失败",
-            status_code=500
-        )
+        app.logger.error(f"Error fetching trades: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': '获取交易记录失败'
+        })
+
+@app.route('/api/strategy-logs')
+def get_strategy_logs():
+    try:
+        # 获取当前选择的交易所
+        exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
+        
+        # 从交易历史中获取策略相关的交易记录，按交易所过滤
+        trades = TradeHistory.query.filter(
+            TradeHistory.strategy.isnot(None),
+            TradeHistory.exchange == exchange
+        ).order_by(TradeHistory.timestamp.desc()).limit(100).all()
+        
+        logs = []
+        for trade in trades:
+            logs.append({
+                'timestamp': trade.timestamp.isoformat(),
+                'strategy': trade.strategy,
+                'symbol': trade.symbol,
+                'signal': trade.side,  # BUY 或 SELL
+                'price': trade.price,
+                'quantity': trade.quantity,
+                'status': trade.status,
+                'strategy_params': trade.strategy_params
+            })
+        
+        return jsonify({
+            'success': True,
+            'logs': logs
+        })
+    except Exception as e:
+        logger.error(f"Error getting strategy logs: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/chart-data')
 @handle_errors
@@ -976,11 +1035,11 @@ def get_account_balance(exchange='Binance'):
                             'side': 'LONG' if position['side'] == 'buy' else 'SHORT'
                         })
             
-            return jsonify({
+            return {
                 'total_balance': float(account_data['total_balance']),
                 'unrealized_pnl': float(account_data['unrealized_pnl']),
                 'positions': positions
-            })
+            }
                 
     except Exception as e:
         logger.error(f"Error getting account balance: {str(e)}")
@@ -2136,6 +2195,74 @@ def get_bot_logs(bot_id):
             message="获取机器人日志失败",
             status_code=500
         )
+
+@app.route('/api/account-data')
+@handle_errors
+@log_request
+def get_account_data():
+    try:
+        # 获取当前选择的交易所
+        exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
+        
+        # 获取账户信息
+        account_info = get_account_balance(exchange)
+        if not account_info:
+            logger.error(f"Failed to get account info for exchange: {exchange}")
+            return api_response(
+                success=False,
+                error="无法获取账户信息",
+                message="请检查API密钥配置",
+                status_code=400
+            )
+            
+        # 获取今日交易记录
+        today = datetime.utcnow().date()
+        today_trades = TradeHistory.query.filter(
+            db.func.date(TradeHistory.timestamp) == today
+        ).all()
+        
+        # 计算今日盈亏
+        daily_pnl = sum(trade.pnl or 0 for trade in today_trades)
+        
+        # 确保所有数值都是浮点数
+        response_data = {
+            'total_balance': float(account_info['total_balance']),
+            'unrealized_pnl': float(account_info['unrealized_pnl']),
+            'daily_pnl': float(daily_pnl),
+            'positions': account_info['positions']
+        }
+        
+        return api_response(data=response_data)
+    except Exception as e:
+        logger.error(f"Error getting account data: {str(e)}")
+        return api_response(
+            success=False,
+            error=str(e),
+            message="获取账户数据失败",
+            status_code=500
+        )
+
+@app.route('/api/high-frequency-status')
+def get_high_frequency_status():
+    """获取高频交易状态API"""
+    try:
+        status = get_high_frequency_trading_status()
+        if status:
+            return jsonify({
+                'success': True,
+                'data': status
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '获取高频交易状态失败'
+            })
+    except Exception as e:
+        logger.error(f"Error in high frequency status API: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
