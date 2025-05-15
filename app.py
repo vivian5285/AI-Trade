@@ -1420,11 +1420,15 @@ def execute_high_frequency_trade(exchange, symbol, side, quantity, price, strate
         # 更新交易参数
         quantity = position_info['position_size'] / price
         
+        # 确定交易方向（做多/做空）
+        position_type = 'LONG' if side == 'BUY' else 'SHORT'
+        
         # 创建交易记录
         trade = TradeHistory(
             exchange=exchange,
             symbol=symbol,
             side=side,
+            position_type=position_type,  # 添加 position_type
             price=price,
             quantity=quantity,
             status='OPEN',

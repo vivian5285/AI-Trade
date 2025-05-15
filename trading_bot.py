@@ -10,6 +10,9 @@ import ta
 import logging
 from typing import List, Dict, Tuple
 import ccxt
+import json
+from flask_sqlalchemy import SQLAlchemy
+from app import db, TradeHistory
 
 # 配置日志
 logging.basicConfig(
@@ -521,6 +524,9 @@ class BinanceTradingBot:
             price = bid if side == 'BUY' else ask
             quantity = self.calculate_position_size(price)
             
+            # 确定交易方向（做多/做空）
+            position_type = 'LONG' if side == 'BUY' else 'SHORT'
+            
             # 构建订单
             order = {
                 'symbol': self.trading_pair,
@@ -538,7 +544,7 @@ class BinanceTradingBot:
                 self.update_position(side, price, quantity)
                 
                 # 记录交易
-                self.record_trade(side, price, quantity)
+                self.record_trade(side, price, quantity, position_type)
                 
                 # 设置动态止盈止损
                 self.set_dynamic_take_profit_stop_loss(side, price)
@@ -609,6 +615,31 @@ class BinanceTradingBot:
             
         except Exception as e:
             logger.error(f"设置动态止盈止损错误: {str(e)}")
+
+    def record_trade(self, side: str, price: float, quantity: float, position_type: str):
+        """记录交易"""
+        try:
+            trade = TradeHistory(
+                exchange='Binance',
+                symbol=self.trading_pair,
+                side=side,
+                position_type=position_type,
+                price=price,
+                quantity=quantity,
+                status='OPEN',
+                strategy=self.strategy,
+                strategy_params=json.dumps({
+                    'leverage': self.leverage,
+                    'stop_loss': self.stop_loss,
+                    'take_profit': self.take_profit
+                })
+            )
+            db.session.add(trade)
+            db.session.commit()
+            logger.info(f"交易记录已保存: {side} {quantity} {self.trading_pair} @ {price}")
+        except Exception as e:
+            logger.error(f"保存交易记录失败: {str(e)}")
+            db.session.rollback()
 
 if __name__ == "__main__":
     bot = BinanceTradingBot()
