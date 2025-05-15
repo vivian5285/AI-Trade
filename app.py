@@ -164,9 +164,19 @@ def get_binance_client():
         raise
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////root/AI-Trade/instance/trade.db'
+app.config['SECRET_KEY'] = 'your-secret-key'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///trading.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Add custom Jinja2 filter for parsing JSON strings
+@app.template_filter('from_json')
+def from_json_filter(value):
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except:
+            return []
+    return value
 
 # 初始化数据库
 db = SQLAlchemy(app)
