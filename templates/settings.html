@@ -4,7 +4,12 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>交易设置</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>交易设置</h2>
+        <a href="{{ url_for('config') }}" class="btn btn-outline-primary">
+            <i class="fas fa-cog"></i> 详细配置
+        </a>
+    </div>
     
     <!-- 交易所选择卡片 -->
     <div class="row mb-4">

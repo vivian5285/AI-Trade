@@ -356,7 +356,7 @@ def trades():
             }
             processed_trades.append(trade_dict)
         
-        return render_template('trade_history.html', 
+        return render_template('trades.html', 
                              trades=processed_trades,
                              pagination=trades)
     except Exception as e:
@@ -432,57 +432,6 @@ def api_keys():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # 路由：交易历史
-@app.route('/trade_history')
-def trade_history():
-    try:
-        # 获取所有交易记录，按时间倒序排列
-        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
-        
-        # 处理策略参数显示
-        for trade in trades:
-            if trade.strategy_params:
-                try:
-                    # 将JSON字符串转换为Python对象
-                    params = json.loads(trade.strategy_params)
-                    # 格式化显示
-                    trade.strategy_params = json.dumps(params, indent=2, ensure_ascii=False)
-                except:
-                    trade.strategy_params = None
-        
-        return render_template('trade_history.html', trades=trades)
-    except Exception as e:
-        logger.error(f"获取交易历史失败: {str(e)}")
-        flash('获取交易历史失败', 'error')
-        return redirect(url_for('index'))
-
-# 添加获取单个交易详情的路由
-@app.route('/trade_history/<int:trade_id>')
-def view_trade_details(trade_id):
-    try:
-        trade = TradeHistory.query.get_or_404(trade_id)
-        return jsonify({
-            'success': True,
-            'trade': {
-                'id': trade.id,
-                'exchange': trade.exchange,
-                'symbol': trade.symbol,
-                'side': trade.side,
-                'price': trade.price,
-                'quantity': trade.quantity,
-                'timestamp': trade.timestamp.isoformat(),
-                'status': trade.status,
-                'strategy': trade.strategy,
-                'strategy_params': trade.strategy_params
-            }
-        })
-    except Exception as e:
-        logger.error(f"获取交易详情失败: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-# 添加获取单个交易详情的API
 @app.route('/api/trades/<int:trade_id>')
 def get_trade_detail(trade_id):
     try:

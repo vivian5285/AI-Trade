@@ -160,7 +160,7 @@ document.getElementById('filterForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(this);
     const params = new URLSearchParams(formData);
-    window.location.href = `/trade_history?${params.toString()}`;
+    window.location.href = `/trades?${params.toString()}`;
 });
 
 // 显示交易详情
