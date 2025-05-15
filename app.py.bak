@@ -1672,7 +1672,7 @@ def get_trading_bots():
 @handle_errors
 @log_request
 @validate_params('name', 'exchange', 'trading_pair', 'strategies', 'funds', 'leverage', 'stop_loss', 'take_profit', 'max_daily_trades')
-def create_trading_bot_api():
+def create_trading_bot():
     try:
         data = request.json
         
