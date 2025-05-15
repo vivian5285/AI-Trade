@@ -187,26 +187,49 @@ def validate_params(*required_params):
 # Binance客户端获取函数
 def get_binance_client():
     try:
+        logger.info("Attempting to create Binance client...")
         api_key = os.getenv('BINANCE_API_KEY')
         api_secret = os.getenv('BINANCE_API_SECRET')
         
         if not api_key or not api_secret:
+            logger.error("Binance API credentials not found in environment variables")
             raise ValueError("Binance API credentials not found in environment variables")
         
+        logger.info("Creating Binance client with provided credentials...")
         client = Client(api_key, api_secret)
         
         # 测试API连接
         try:
-            client.get_account()
+            logger.info("Testing API connection...")
+            # 添加重试机制
+            max_retries = 3
+            retry_delay = 2  # 初始延迟2秒
+            
+            for attempt in range(max_retries):
+                try:
+                    client.get_account()
+                    logger.info("Successfully connected to Binance API")
+                    return client
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if "restricted location" in error_msg:
+                        logger.warning("Binance API is restricted in this location, but keeping the key active")
+                        # 返回一个特殊的客户端对象，标记为受限
+                        client.is_restricted = True
+                        return client
+                    else:
+                        if attempt < max_retries - 1:  # 如果不是最后一次尝试
+                            wait_time = retry_delay * (2 ** attempt)  # 指数退避
+                            logger.warning(f"Attempt {attempt + 1} failed, waiting {wait_time} seconds before retry: {str(e)}")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(f"Failed to connect to Binance API after {max_retries} attempts: {str(e)}")
+                            raise e
         except Exception as e:
-            if "restricted location" in str(e).lower():
-                logger.warning("Binance API is restricted in this location, but keeping the key active")
-                # 返回一个特殊的客户端对象，标记为受限
-                client.is_restricted = True
-            else:
-                raise e
+            logger.error(f"Error testing API connection: {str(e)}")
+            raise e
                 
-        return client
     except Exception as e:
         logger.error(f"Error creating Binance client: {str(e)}")
         raise
@@ -1021,6 +1044,7 @@ def get_account_balance(exchange='Binance'):
     """获取账户余额和持仓信息"""
     try:
         if exchange == 'Binance':
+            logger.info("Attempting to get Binance account balance...")
             client = get_binance_client()
             
             # 如果客户端被标记为受限，返回模拟数据
@@ -1038,8 +1062,10 @@ def get_account_balance(exchange='Binance'):
             
             for attempt in range(max_retries):
                 try:
+                    logger.info(f"Attempt {attempt + 1} to get futures account info...")
                     # 获取合约账户信息
                     futures_account = client.futures_account()
+                    logger.info("Successfully retrieved futures account info")
                     
                     # 计算总权益和未实现盈亏
                     total_balance = float(futures_account['totalWalletBalance'])
@@ -1059,6 +1085,7 @@ def get_account_balance(exchange='Binance'):
                                 'side': 'LONG' if float(position['positionAmt']) > 0 else 'SHORT'
                             })
                     
+                    logger.info(f"Successfully processed account data. Total balance: {total_balance}, Unrealized PNL: {unrealized_pnl}, Positions: {len(positions)}")
                     return {
                         'total_balance': total_balance,
                         'unrealized_pnl': unrealized_pnl,
@@ -1066,17 +1093,20 @@ def get_account_balance(exchange='Binance'):
                     }
                     
                 except Exception as e:
+                    logger.error(f"Error in attempt {attempt + 1}: {str(e)}")
                     if attempt < max_retries - 1:  # 如果不是最后一次尝试
                         wait_time = retry_delay * (2 ** attempt)  # 指数退避
-                        logger.warning(f"Attempt {attempt + 1} failed, waiting {wait_time} seconds before retry: {str(e)}")
+                        logger.warning(f"Waiting {wait_time} seconds before retry...")
                         time.sleep(wait_time)
                         continue
                     else:
                         raise e
             
         elif exchange == 'LBank':
+            logger.info("Attempting to get LBank account balance...")
             api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
             if not api_key:
+                logger.error("No active LBank API key found")
                 raise Exception("No active LBank API key found")
                 
             timestamp = str(int(time.time() * 1000))
@@ -1093,6 +1123,7 @@ def get_account_balance(exchange='Binance'):
             
             for attempt in range(max_retries):
                 try:
+                    logger.info(f"Attempt {attempt + 1} to get LBank account info...")
                     # 获取合约账户信息
                     response = requests.get('https://api.lbank.info/v2/user/contract_account', params=params)
                     
@@ -1132,6 +1163,7 @@ def get_account_balance(exchange='Binance'):
                                     'side': 'LONG' if position['side'] == 'buy' else 'SHORT'
                                 })
                     
+                    logger.info(f"Successfully processed LBank account data. Total balance: {account_data['total_balance']}, Positions: {len(positions)}")
                     return {
                         'total_balance': float(account_data['total_balance']),
                         'unrealized_pnl': float(account_data['unrealized_pnl']),
@@ -1139,9 +1171,10 @@ def get_account_balance(exchange='Binance'):
                     }
                     
                 except Exception as e:
+                    logger.error(f"Error in attempt {attempt + 1}: {str(e)}")
                     if attempt < max_retries - 1:  # 如果不是最后一次尝试
                         wait_time = retry_delay * (2 ** attempt)  # 指数退避
-                        logger.warning(f"Attempt {attempt + 1} failed, waiting {wait_time} seconds before retry: {str(e)}")
+                        logger.warning(f"Waiting {wait_time} seconds before retry...")
                         time.sleep(wait_time)
                         continue
                     else:
@@ -2316,6 +2349,7 @@ def get_account_data():
     try:
         # 获取当前选择的交易所
         exchange = os.getenv('CURRENT_EXCHANGE', 'binance')
+        logger.info(f"Getting account data for exchange: {exchange}")
         
         # 获取账户信息
         account_info = get_account_balance(exchange)
@@ -2329,7 +2363,8 @@ def get_account_data():
                     'daily_pnl': 0.0,
                     'positions': [],
                     'status': 'error',
-                    'message': 'Unable to fetch account data'
+                    'message': 'Unable to fetch account data',
+                    'exchange': exchange
                 }
             )
             
@@ -2357,9 +2392,11 @@ def get_account_data():
                 'leverage': float(pos.get('leverage', 1)),
                 'side': pos.get('side', 'NONE')
             } for pos in account_info.get('positions', [])],
-            'status': 'success'
+            'status': 'success',
+            'exchange': exchange
         }
         
+        logger.info(f"Successfully retrieved account data for {exchange}")
         return api_response(data=response_data)
     except Exception as e:
         logger.error(f"Error getting account data: {str(e)}")
@@ -2370,7 +2407,8 @@ def get_account_data():
                 'daily_pnl': 0.0,
                 'positions': [],
                 'status': 'error',
-                'message': str(e)
+                'message': str(e),
+                'exchange': exchange
             }
         )
 
