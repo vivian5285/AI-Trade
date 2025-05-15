@@ -1785,10 +1785,14 @@ def create_trading_bot_api():
         new_bot = TradingBotConfig(
             name=data['name'],
             exchange=data['exchange'],
-            symbol=data['symbol'],
-            strategy=data['strategy'],
-            parameters=json.dumps(data.get('parameters', {})),
-            is_active=data.get('is_active', True)
+            trading_pair=data['symbol'],
+            strategies=json.dumps([data['strategy']]),
+            funds=float(data.get('funds', 1000)),
+            leverage=int(data.get('leverage', 10)),
+            stop_loss=float(data.get('stop_loss', 0.02)),
+            take_profit=float(data.get('take_profit', 0.04)),
+            max_daily_trades=int(data.get('max_daily_trades', 100)),
+            status='STOPPED'
         )
         db.session.add(new_bot)
         db.session.commit()
