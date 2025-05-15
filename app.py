@@ -117,7 +117,7 @@ def handle_errors(f):
             return f(*args, **kwargs)
         except Exception as e:
             logger.error(f"Error in {f.__name__}: {str(e)}")
-            return jsonify({"error": str(e)}), 500
+            return api_response(success=False, error=str(e), status_code=500)
     return decorated_function
 
 # 请求日志装饰器
@@ -135,13 +135,15 @@ def validate_params(*required_params):
         def decorated_function(*args, **kwargs):
             data = request.get_json()
             if not data:
-                return jsonify({"error": "No data provided"}), 400
+                return api_response(success=False, error="No data provided", status_code=400)
             
             missing_params = [param for param in required_params if param not in data]
             if missing_params:
-                return jsonify({
-                    "error": f"Missing required parameters: {', '.join(missing_params)}"
-                }), 400
+                return api_response(
+                    success=False,
+                    error=f"Missing required parameters: {', '.join(missing_params)}",
+                    status_code=400
+                )
             
             return f(*args, **kwargs)
         return decorated_function
