@@ -2218,18 +2218,27 @@ def get_account_data():
         # 获取今日交易记录
         today = datetime.utcnow().date()
         today_trades = TradeHistory.query.filter(
-            db.func.date(TradeHistory.timestamp) == today
+            db.func.date(TradeHistory.timestamp) == today,
+            TradeHistory.exchange == exchange
         ).all()
         
         # 计算今日盈亏
         daily_pnl = sum(trade.pnl or 0 for trade in today_trades)
         
-        # 确保所有数值都是浮点数
+        # 确保所有数值都是浮点数，并处理可能的None值
         response_data = {
-            'total_balance': float(account_info['total_balance']),
-            'unrealized_pnl': float(account_info['unrealized_pnl']),
+            'total_balance': float(account_info.get('total_balance', 0)),
+            'unrealized_pnl': float(account_info.get('unrealized_pnl', 0)),
             'daily_pnl': float(daily_pnl),
-            'positions': account_info['positions']
+            'positions': [{
+                'symbol': pos.get('symbol', ''),
+                'amount': float(pos.get('amount', 0)),
+                'entry_price': float(pos.get('entry_price', 0)),
+                'mark_price': float(pos.get('mark_price', 0)),
+                'unrealized_pnl': float(pos.get('unrealized_pnl', 0)),
+                'leverage': float(pos.get('leverage', 1)),
+                'side': pos.get('side', 'NONE')
+            } for pos in account_info.get('positions', [])]
         }
         
         return api_response(data=response_data)

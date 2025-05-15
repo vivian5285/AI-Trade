@@ -165,17 +165,28 @@ function setLoading(elementId, isLoading) {
     }
 }
 
+function setError(elementId, errorMessage) {
+    const element = document.getElementById(elementId);
+    element.textContent = errorMessage;
+    element.classList.add('text-danger');
+}
+
 function updateAccountData() {
+    setLoading('total-balance', true);
     setLoading('daily-pnl', true);
-    setLoading('open-positions', true);
-    setLoading('total-position', true);
+    setLoading('unrealized-pnl', true);
+    setLoading('position-count', true);
 
     fetch('/api/account-data')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (!data.success) {
-                console.error('Error fetching account data:', data.error);
-                return;
+                throw new Error(data.error || '获取账户数据失败');
             }
             
             // 更新总余额
@@ -198,38 +209,7 @@ function updateAccountData() {
             
             // 更新持仓列表
             const positionsTable = document.getElementById('positions-table');
-            if (data.data.positions.length > 0) {
-                positionsTable.innerHTML = `
-                    <thead>
-                        <tr>
-                            <th>交易对</th>
-                            <th>方向</th>
-                            <th>数量</th>
-                            <th>杠杆</th>
-                            <th>开仓价</th>
-                            <th>标记价</th>
-                            <th>未实现盈亏</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${data.data.positions.map(position => `
-                            <tr>
-                                <td>${position.symbol}</td>
-                                <td class="${position.side === 'LONG' ? 'text-success' : 'text-danger'}">
-                                    ${position.side}
-                                </td>
-                                <td>${Math.abs(position.amount).toFixed(4)}</td>
-                                <td>${position.leverage}x</td>
-                                <td>$${position.entry_price.toFixed(2)}</td>
-                                <td>$${position.mark_price.toFixed(2)}</td>
-                                <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">
-                                    $${position.unrealized_pnl.toFixed(2)}
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                `;
-            } else {
+            if (data.data.positions.length === 0) {
                 positionsTable.innerHTML = `
                     <tbody>
                         <tr>
@@ -237,19 +217,37 @@ function updateAccountData() {
                         </tr>
                     </tbody>
                 `;
+            } else {
+                const tbody = document.createElement('tbody');
+                data.data.positions.forEach(position => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${position.symbol}</td>
+                        <td class="${position.side === 'LONG' ? 'text-success' : 'text-danger'}">${position.side}</td>
+                        <td>${Math.abs(position.amount).toFixed(4)}</td>
+                        <td>${position.leverage}x</td>
+                        <td>$${position.entry_price.toFixed(2)}</td>
+                        <td>$${position.mark_price.toFixed(2)}</td>
+                        <td class="${position.unrealized_pnl >= 0 ? 'text-success' : 'text-danger'}">$${position.unrealized_pnl.toFixed(2)}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                positionsTable.innerHTML = '';
+                positionsTable.appendChild(tbody);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            // 显示错误信息
-            document.getElementById('total-balance').textContent = '$0.00';
-            document.getElementById('daily-pnl').textContent = '加载失败';
-            document.getElementById('unrealized-pnl').textContent = '$0.00';
-            document.getElementById('position-count').textContent = '0';
-            document.getElementById('positions-table').innerHTML = `
+            setError('total-balance', '加载失败');
+            setError('daily-pnl', '加载失败');
+            setError('unrealized-pnl', '加载失败');
+            setError('position-count', '0');
+            
+            const positionsTable = document.getElementById('positions-table');
+            positionsTable.innerHTML = `
                 <tbody>
                     <tr>
-                        <td colspan="7" class="text-center">加载失败</td>
+                        <td colspan="7" class="text-center text-danger">加载失败</td>
                     </tr>
                 </tbody>
             `;
