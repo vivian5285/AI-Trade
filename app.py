@@ -302,7 +302,7 @@ def index():
 def dashboard():
     try:
         api_keys = APIKey.query.all()
-        # 修改查询，不包含 bot_id 列
+        # 修改查询，包含 position_type 列
         trades = db.session.query(
             TradeHistory.id,
             TradeHistory.exchange,
@@ -325,27 +325,44 @@ def dashboard():
 
 # 路由：交易记录
 @app.route('/trades')
+@handle_errors
+@log_request
 def trades():
     try:
-        # 获取所有交易记录，按时间倒序排列
-        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
         
-        # 处理策略参数显示
-        for trade in trades:
-            if trade.strategy_params:
-                try:
-                    # 将JSON字符串转换为Python对象
-                    params = json.loads(trade.strategy_params)
-                    # 格式化显示
-                    trade.strategy_params = json.dumps(params, indent=2, ensure_ascii=False)
-                except:
-                    trade.strategy_params = None
+        # 获取所有交易记录
+        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).paginate(
+            page=page, per_page=per_page, error_out=False)
         
-        return render_template('trades.html', trades=trades)
+        # 处理交易记录数据
+        processed_trades = []
+        for trade in trades.items:
+            trade_dict = {
+                'id': trade.id,
+                'exchange': trade.exchange,
+                'symbol': trade.symbol,
+                'side': trade.side,
+                'position_type': trade.position_type,
+                'price': trade.price,
+                'quantity': trade.quantity,
+                'timestamp': trade.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'status': trade.status,
+                'strategy': trade.strategy,
+                'strategy_params': trade.strategy_params,
+                'pnl': trade.pnl,
+                'pnl_percentage': trade.pnl_percentage
+            }
+            processed_trades.append(trade_dict)
+        
+        return render_template('trade_history.html', 
+                             trades=processed_trades,
+                             pagination=trades)
     except Exception as e:
-        logger.error(f"获取交易记录失败: {str(e)}")
-        flash('获取交易记录失败', 'error')
-        return redirect(url_for('index'))
+        logger.error(f"Error in trades route: {str(e)}")
+        flash('获取交易记录失败', 'danger')
+        return redirect(url_for('dashboard'))
 
 # 路由：系统配置
 @app.route('/config')
