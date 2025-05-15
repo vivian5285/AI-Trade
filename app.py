@@ -2153,16 +2153,20 @@ def create_trading_bot_page():
             new_bot = TradingBotConfig(
                 name=name,
                 exchange=exchange,
-                symbol=symbol,
-                strategy=strategy,
-                parameters=parameters,
-                is_active=True
+                trading_pair=symbol,
+                strategies=json.dumps([strategy]),
+                funds=float(request.form.get('funds', 1000)),
+                leverage=int(request.form.get('leverage', 10)),
+                stop_loss=float(request.form.get('stop_loss', 0.02)),
+                take_profit=float(request.form.get('take_profit', 0.04)),
+                max_daily_trades=int(request.form.get('max_daily_trades', 100)),
+                status='STOPPED'
             )
             db.session.add(new_bot)
             db.session.commit()
             
             flash('交易机器人创建成功', 'success')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('trading_bots'))
             
         except Exception as e:
             db.session.rollback()
