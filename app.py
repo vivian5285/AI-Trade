@@ -792,9 +792,11 @@ def check_api_keys():
         return False
 
 # 在应用启动时检查API密钥
-@app.before_first_request
-def before_first_request():
-    check_api_keys()
+@app.before_request
+def before_request():
+    if not hasattr(app, 'has_checked_api_keys'):
+        app.has_checked_api_keys = True
+        check_api_keys()
 
 # 修改交易执行函数
 def execute_trade(exchange, symbol, side, quantity, price, strategy=None, strategy_params=None, bot_id=None):
