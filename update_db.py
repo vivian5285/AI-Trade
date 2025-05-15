@@ -3,7 +3,7 @@ import os
 
 def update_database():
     # 获取数据库文件路径
-    db_path = os.path.join('instance', 'trade.db')
+    db_path = 'trading.db'
     
     # 连接到数据库
     conn = sqlite3.connect(db_path)

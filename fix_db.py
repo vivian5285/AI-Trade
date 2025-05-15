@@ -3,7 +3,7 @@ import os
 
 def fix_database():
     # 获取数据库文件路径
-    db_path = os.path.join('instance', 'trade.db')
+    db_path = 'trading.db'
     
     # 如果数据库文件存在，先删除它
     if os.path.exists(db_path):

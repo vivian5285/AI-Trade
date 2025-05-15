@@ -5,9 +5,9 @@ from datetime import datetime
 
 def backup_database():
     """备份数据库文件"""
-    db_path = 'instance/trade.db'
+    db_path = 'instance/trading.db'
     if os.path.exists(db_path):
-        backup_path = f'instance/trade_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.db'
+        backup_path = f'instance/trading_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.db'
         shutil.copy2(db_path, backup_path)
         print(f"数据库已备份到: {backup_path}")
         return True
@@ -28,7 +28,7 @@ def fix_database():
             return False
 
         # 连接到数据库
-        conn = sqlite3.connect('instance/trade.db')
+        conn = sqlite3.connect('instance/trading.db')
         cursor = conn.cursor()
 
         # 检查bot_id列是否存在
@@ -41,6 +41,17 @@ def fix_database():
             print("成功添加bot_id列到trade_history表")
         else:
             print("bot_id列已存在，无需添加")
+
+        # 检查position_type列是否存在
+        if not column_exists(cursor, 'trade_history', 'position_type'):
+            # 添加position_type列到trade_history表
+            cursor.execute('''
+                ALTER TABLE trade_history 
+                ADD COLUMN position_type VARCHAR(10) DEFAULT "LONG"
+            ''')
+            print("成功添加position_type列到trade_history表")
+        else:
+            print("position_type列已存在，无需添加")
 
         # 提交更改
         conn.commit()
