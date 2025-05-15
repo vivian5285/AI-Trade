@@ -291,7 +291,11 @@ STRATEGY_NAMES = {
 # 路由：首页
 @app.route('/')
 def index():
-    return redirect(url_for('dashboard'))
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Error loading index page: {str(e)}")
+        return render_template('error.html', error=str(e)), 500
 
 # 路由：仪表盘
 @app.route('/dashboard')
