@@ -2047,7 +2047,7 @@ def trading_bots():
 
 # 路由：创建交易机器人页面
 @app.route('/trading-bots/create')
-def create_trading_bot():
+def create_trading_bot_page():
     try:
         return render_template('create_trading_bot.html')
     except Exception as e:
