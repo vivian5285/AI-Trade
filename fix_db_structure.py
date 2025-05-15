@@ -13,6 +13,12 @@ def backup_database():
         return True
     return False
 
+def column_exists(cursor, table_name, column_name):
+    """检查列是否存在"""
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = cursor.fetchall()
+    return any(col[1] == column_name for col in columns)
+
 def fix_database():
     """修复数据库结构"""
     try:
@@ -25,15 +31,19 @@ def fix_database():
         conn = sqlite3.connect('instance/trade.db')
         cursor = conn.cursor()
 
-        # 添加bot_id列到trade_history表
-        cursor.execute('''
-            ALTER TABLE trade_history 
-            ADD COLUMN bot_id INTEGER REFERENCES trading_bot_config(id)
-        ''')
+        # 检查bot_id列是否存在
+        if not column_exists(cursor, 'trade_history', 'bot_id'):
+            # 添加bot_id列到trade_history表
+            cursor.execute('''
+                ALTER TABLE trade_history 
+                ADD COLUMN bot_id INTEGER REFERENCES trading_bot_config(id)
+            ''')
+            print("成功添加bot_id列到trade_history表")
+        else:
+            print("bot_id列已存在，无需添加")
 
         # 提交更改
         conn.commit()
-        print("成功添加bot_id列到trade_history表")
 
         # 关闭连接
         conn.close()
