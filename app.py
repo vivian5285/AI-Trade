@@ -2222,27 +2222,5 @@ def get_account_data():
             status_code=500
         )
 
-@app.route('/api/high-frequency-status')
-def get_high_frequency_status():
-    """获取高频交易状态API"""
-    try:
-        status = get_high_frequency_trading_status()
-        if status:
-            return jsonify({
-                'success': True,
-                'data': status
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': '获取高频交易状态失败'
-            })
-    except Exception as e:
-        logger.error(f"Error in high frequency status API: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
