@@ -812,7 +812,8 @@ def check_api_keys():
                     timestamp = str(int(time.time() * 1000))
                     params = {
                         'api_key': key.api_key,
-                        'timestamp': timestamp
+                        'timestamp': timestamp,
+                        'sign_type': 'MD5'  # 添加签名类型
                     }
                     sign = generate_lbank_sign(params, key.api_secret)
                     if not sign:
@@ -821,15 +822,28 @@ def check_api_keys():
                     
                     # 添加错误处理和重试逻辑
                     max_retries = 3
+                    retry_delay = 2  # 初始延迟2秒
                     for attempt in range(max_retries):
                         try:
-                            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-                            response.raise_for_status()  # 检查HTTP错误
+                            # 使用正确的 API 端点
+                            response = requests.get('https://api.lbank.info/v2/user/info', params=params)
+                            
+                            # 处理429错误（请求频率限制）
+                            if response.status_code == 429:
+                                if attempt < max_retries - 1:  # 如果不是最后一次尝试
+                                    wait_time = retry_delay * (2 ** attempt)  # 指数退避
+                                    logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
+                                    time.sleep(wait_time)
+                                    continue
+                                else:
+                                    raise Exception("Rate limit exceeded after all retries")
+                            
+                            response.raise_for_status()  # 检查其他HTTP错误
                             
                             # 尝试解析JSON响应
                             try:
                                 data = response.json()
-                                if not data.get('result'):
+                                if data.get('error_code') != 0:  # LBank API 使用 error_code 表示错误
                                     raise Exception(f"LBank API error: {data.get('error_code', 'Unknown error')}")
                                 break  # 如果成功，跳出重试循环
                             except json.JSONDecodeError as e:
@@ -841,7 +855,7 @@ def check_api_keys():
                         except requests.RequestException as e:
                             if attempt == max_retries - 1:  # 最后一次尝试
                                 raise Exception(f"LBank API request failed: {str(e)}")
-                            time.sleep(1)  # 等待1秒后重试
+                            time.sleep(retry_delay * (2 ** attempt))  # 指数退避
                             continue
                             
             except Exception as e:
@@ -854,6 +868,20 @@ def check_api_keys():
     except Exception as e:
         logger.error(f"Error checking API keys: {str(e)}")
         return False
+
+def generate_lbank_sign(params, secret_key):
+    """生成 LBank API 签名"""
+    try:
+        # 将参数按键排序
+        sorted_params = sorted(params.items(), key=lambda x: x[0])
+        # 构建签名字符串
+        sign_str = '&'.join([f"{k}={v}" for k, v in sorted_params])
+        # 使用 MD5 生成签名
+        signature = hashlib.md5((sign_str + secret_key).encode('utf-8')).hexdigest()
+        return signature
+    except Exception as e:
+        logger.error(f"Error generating LBank sign: {str(e)}")
+        return None
 
 # 在应用启动时检查API密钥
 @app.before_request
@@ -2267,99 +2295,6 @@ def get_account_data():
             message="获取账户数据失败",
             status_code=500
         )
-
-def generate_lbank_sign(params, secret_key):
-    """生成 LBank API 签名"""
-    try:
-        # 将参数按键排序
-        sorted_params = sorted(params.items(), key=lambda x: x[0])
-        # 构建签名字符串
-        sign_str = '&'.join([f"{k}={v}" for k, v in sorted_params])
-        # 使用 HMAC-SHA256 生成签名
-        signature = hmac.new(
-            secret_key.encode('utf-8'),
-            sign_str.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-        return signature
-    except Exception as e:
-        logger.error(f"Error generating LBank sign: {str(e)}")
-        return None
-
-def check_api_keys():
-    try:
-        # 检查是否有活跃的API密钥
-        active_keys = APIKey.query.filter_by(is_active=True).all()
-        if not active_keys:
-            logger.warning("No active API keys found")
-            return False
-            
-        # 检查每个API密钥是否有效
-        for key in active_keys:
-            try:
-                if key.exchange == 'Binance':
-                    try:
-                        client = Client(key.api_key, key.api_secret)
-                        client.get_account()
-                    except Exception as e:
-                        if "restricted location" in str(e).lower():
-                            logger.warning("Binance API is restricted in this location, but keeping the key active")
-                            continue
-                        else:
-                            raise e
-                elif key.exchange == 'LBank':
-                    timestamp = str(int(time.time() * 1000))
-                    params = {
-                        'api_key': key.api_key,
-                        'timestamp': timestamp
-                    }
-                    sign = generate_lbank_sign(params, key.api_secret)
-                    if not sign:
-                        raise Exception("Failed to generate LBank signature")
-                    params['sign'] = sign
-                    
-                    # 添加错误处理和重试逻辑
-                    max_retries = 3
-                    for attempt in range(max_retries):
-                        try:
-                            response = requests.get('https://api.lbank.info/v2/user/account', params=params)
-                            response.raise_for_status()  # 检查HTTP错误
-                            
-                            # 尝试解析JSON响应
-                            try:
-                                data = response.json()
-                                if not data.get('result'):
-                                    raise Exception(f"LBank API error: {data.get('error_code', 'Unknown error')}")
-                                break  # 如果成功，跳出重试循环
-                            except json.JSONDecodeError as e:
-                                logger.error(f"Failed to parse LBank API response: {response.text}")
-                                if attempt == max_retries - 1:  # 最后一次尝试
-                                    raise Exception("Invalid LBank API response format")
-                                continue
-                                
-                        except requests.RequestException as e:
-                            if attempt == max_retries - 1:  # 最后一次尝试
-                                raise Exception(f"LBank API request failed: {str(e)}")
-                            time.sleep(1)  # 等待1秒后重试
-                            continue
-                            
-            except Exception as e:
-                logger.error(f"Invalid API key for {key.exchange}: {str(e)}")
-                key.is_active = False
-                db.session.commit()
-                continue
-                
-        return True
-    except Exception as e:
-        logger.error(f"Error checking API keys: {str(e)}")
-        return False
-
-# 在应用启动时检查API密钥
-@app.before_request
-def before_request():
-    if not hasattr(app, 'has_checked_api_keys'):
-        app.has_checked_api_keys = True
-        check_api_keys()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True) 
