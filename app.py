@@ -301,27 +301,37 @@ def index():
 @app.route('/dashboard')
 def dashboard():
     try:
+        # 获取 API 密钥
         api_keys = APIKey.query.all()
-        # 修改查询，包含 position_type 列
-        trades = db.session.query(
-            TradeHistory.id,
-            TradeHistory.exchange,
-            TradeHistory.symbol,
-            TradeHistory.side,
-            TradeHistory.position_type,
-            TradeHistory.price,
-            TradeHistory.quantity,
-            TradeHistory.timestamp,
-            TradeHistory.status,
-            TradeHistory.strategy,
-            TradeHistory.strategy_params,
-            TradeHistory.pnl,
-            TradeHistory.pnl_percentage
-        ).order_by(TradeHistory.timestamp.desc()).limit(10).all()
-        return render_template('dashboard.html', api_keys=api_keys, trades=trades)
+        
+        # 获取最近的交易记录
+        trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(10).all()
+        
+        # 处理交易记录数据
+        processed_trades = []
+        for trade in trades:
+            trade_dict = {
+                'id': trade.id,
+                'exchange': trade.exchange,
+                'symbol': trade.symbol,
+                'side': trade.side,
+                'position_type': trade.position_type,
+                'price': trade.price,
+                'quantity': trade.quantity,
+                'timestamp': trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') if trade.timestamp else '',
+                'status': trade.status,
+                'strategy': trade.strategy,
+                'strategy_params': trade.strategy_params,
+                'pnl': trade.pnl,
+                'pnl_percentage': trade.pnl_percentage
+            }
+            processed_trades.append(trade_dict)
+        
+        return render_template('dashboard.html', api_keys=api_keys, trades=processed_trades)
     except Exception as e:
         logger.error(f"Error in dashboard route: {str(e)}")
-        return render_template('error.html', error=str(e)), 500
+        flash('获取数据失败，请稍后重试', 'danger')
+        return render_template('dashboard.html', api_keys=[], trades=[])
 
 # 路由：交易记录
 @app.route('/trades')
