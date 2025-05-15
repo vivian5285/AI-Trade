@@ -17,6 +17,7 @@ import subprocess
 import signal
 from functools import lru_cache, wraps
 from trading_bot_manager import trading_bot_manager
+from flask_migrate import Migrate
 
 # 加载环境变量
 load_dotenv()
@@ -180,6 +181,7 @@ def from_json_filter(value):
 
 # 初始化数据库
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # API密钥模型
 class APIKey(db.Model):
