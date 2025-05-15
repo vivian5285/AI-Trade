@@ -48,8 +48,58 @@
             </div>
         </div>
     </div>
-    <!-- 持仓详情表格 -->
+    <!-- 交易历史 -->
     <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">最近交易</h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>时间</th>
+                                    <th>交易所</th>
+                                    <th>交易对</th>
+                                    <th>方向</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>状态</th>
+                                    <th>策略</th>
+                                    <th>盈亏</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for trade in trades %}
+                                <tr>
+                                    <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>{{ trade.exchange }}</td>
+                                    <td>{{ trade.symbol }}</td>
+                                    <td class="{{ 'text-success' if trade.side == 'BUY' else 'text-danger' }}">
+                                        {{ trade.side }}
+                                    </td>
+                                    <td>{{ "%.8f"|format(trade.price) }}</td>
+                                    <td>{{ "%.8f"|format(trade.quantity) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if trade.status == 'CLOSED' else 'warning' }}">
+                                            {{ trade.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ trade.strategy }}</td>
+                                    <td class="{{ 'text-success' if trade.pnl > 0 else 'text-danger' }}">
+                                        {{ "%.2f"|format(trade.pnl) if trade.pnl else '-' }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 持仓详情表格 -->
+    <div class="row mt-4">
         <div class="col-md-12">
             <div class="card shadow-sm">
                 <div class="card-body">

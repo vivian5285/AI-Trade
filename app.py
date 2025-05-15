@@ -2062,37 +2062,28 @@ def create_trading_bot_page():
             parameters = request.form.get('parameters', '{}')
             
             # 验证必填字段
-            data = request.form
-            
-            # 验证数据
-            if not validate_bot_data(data):
-                flash('无效的机器人参数', 'error')
+            if not all([name, exchange, symbol, strategy]):
+                flash('请填写所有必填字段', 'error')
                 return redirect(url_for('create_trading_bot_page'))
             
             # 创建新的交易机器人配置
             new_bot = TradingBotConfig(
-                name=data['name'],
-                exchange=data['exchange'],
-                trading_pair=data['trading_pair'],
-                status='STOPPED',
-                strategies=json.dumps(data['strategies']),
-                funds=float(data['funds']),
-                leverage=int(data['leverage']),
-                stop_loss=float(data['stop_loss']),
-                take_profit=float(data['take_profit']),
-                max_daily_trades=int(data['max_daily_trades'])
+                name=name,
+                exchange=exchange,
+                symbol=symbol,
+                strategy=strategy,
+                parameters=parameters,
+                is_active=True
             )
-            
             db.session.add(new_bot)
             db.session.commit()
             
             flash('交易机器人创建成功', 'success')
-            return redirect(url_for('trading_bots'))
+            return redirect(url_for('dashboard'))
             
         except Exception as e:
-            logger.error(f"创建交易机器人失败: {str(e)}")
             db.session.rollback()
-            flash('创建交易机器人失败', 'error')
+            flash(f'创建交易机器人失败: {str(e)}', 'error')
             return redirect(url_for('create_trading_bot_page'))
     
     return render_template('create_trading_bot.html')
