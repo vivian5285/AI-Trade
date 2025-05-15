@@ -23,6 +23,11 @@ from urllib.parse import urlencode
 # 加载环境变量
 load_dotenv()
 
+# 调试环境变量
+logger = logging.getLogger(__name__)
+logger.info(f"BINANCE_API_KEY: {os.getenv('BINANCE_API_KEY')}")
+logger.info(f"BINANCE_API_SECRET: {os.getenv('BINANCE_API_SECRET')}")
+
 # 确保必要的目录存在
 for directory in ['/root/AI-Trade/instance', '/root/AI-Trade/logs']:
     if not os.path.exists(directory):
@@ -188,7 +193,20 @@ def get_binance_client():
         if not api_key or not api_secret:
             raise ValueError("Binance API credentials not found in environment variables")
         
-        return Client(api_key, api_secret)
+        client = Client(api_key, api_secret)
+        
+        # 测试API连接
+        try:
+            client.get_account()
+        except Exception as e:
+            if "restricted location" in str(e).lower():
+                logger.warning("Binance API is restricted in this location, but keeping the key active")
+                # 返回一个特殊的客户端对象，标记为受限
+                client.is_restricted = True
+            else:
+                raise e
+                
+        return client
     except Exception as e:
         logger.error(f"Error creating Binance client: {str(e)}")
         raise
@@ -1004,32 +1022,57 @@ def get_account_balance(exchange='Binance'):
     try:
         if exchange == 'Binance':
             client = get_binance_client()
-            # 获取合约账户信息
-            futures_account = client.futures_account()
             
-            # 计算总权益和未实现盈亏
-            total_balance = float(futures_account['totalWalletBalance'])
-            unrealized_pnl = float(futures_account['totalUnrealizedProfit'])
+            # 如果客户端被标记为受限，返回模拟数据
+            if hasattr(client, 'is_restricted') and client.is_restricted:
+                logger.warning("Using simulated account data due to location restrictions")
+                return {
+                    'total_balance': 0.0,
+                    'unrealized_pnl': 0.0,
+                    'positions': []
+                }
             
-            # 获取持仓信息
-            positions = []
-            for position in futures_account['positions']:
-                if float(position['positionAmt']) != 0:  # 只显示有持仓的
-                    positions.append({
-                        'symbol': position['symbol'],
-                        'amount': float(position['positionAmt']),
-                        'entry_price': float(position['entryPrice']),
-                        'mark_price': float(position['markPrice']),
-                        'unrealized_pnl': float(position['unRealizedProfit']),
-                        'leverage': float(position['leverage']),
-                        'side': 'LONG' if float(position['positionAmt']) > 0 else 'SHORT'
-                    })
+            # 添加重试机制
+            max_retries = 3
+            retry_delay = 2  # 初始延迟2秒
             
-            return {
-                'total_balance': total_balance,
-                'unrealized_pnl': unrealized_pnl,
-                'positions': positions
-            }
+            for attempt in range(max_retries):
+                try:
+                    # 获取合约账户信息
+                    futures_account = client.futures_account()
+                    
+                    # 计算总权益和未实现盈亏
+                    total_balance = float(futures_account['totalWalletBalance'])
+                    unrealized_pnl = float(futures_account['totalUnrealizedProfit'])
+                    
+                    # 获取持仓信息
+                    positions = []
+                    for position in futures_account['positions']:
+                        if float(position['positionAmt']) != 0:  # 只显示有持仓的
+                            positions.append({
+                                'symbol': position['symbol'],
+                                'amount': float(position['positionAmt']),
+                                'entry_price': float(position['entryPrice']),
+                                'mark_price': float(position['markPrice']),
+                                'unrealized_pnl': float(position['unRealizedProfit']),
+                                'leverage': float(position['leverage']),
+                                'side': 'LONG' if float(position['positionAmt']) > 0 else 'SHORT'
+                            })
+                    
+                    return {
+                        'total_balance': total_balance,
+                        'unrealized_pnl': unrealized_pnl,
+                        'positions': positions
+                    }
+                    
+                except Exception as e:
+                    if attempt < max_retries - 1:  # 如果不是最后一次尝试
+                        wait_time = retry_delay * (2 ** attempt)  # 指数退避
+                        logger.warning(f"Attempt {attempt + 1} failed, waiting {wait_time} seconds before retry: {str(e)}")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise e
             
         elif exchange == 'LBank':
             api_key = APIKey.query.filter_by(exchange='LBank', is_active=True).first()
@@ -1044,40 +1087,65 @@ def get_account_balance(exchange='Binance'):
             sign = generate_lbank_sign(params, api_key.api_secret)
             params['sign'] = sign
             
-            # 获取合约账户信息
-            response = requests.get('https://api.lbank.info/v2/user/contract_account', params=params)
-            if response.status_code != 200:
-                raise Exception("Failed to fetch LBank data")
-                
-            data = response.json()
-            if not data['result']:
-                raise Exception("Failed to get LBank account data")
-                
-            account_data = data['data']
+            # 添加重试机制
+            max_retries = 3
+            retry_delay = 2  # 初始延迟2秒
             
-            # 获取持仓信息
-            positions_response = requests.get('https://api.lbank.info/v2/user/contract_position', params=params)
-            positions_data = positions_response.json()
-            
-            positions = []
-            if positions_data['result']:
-                for position in positions_data['data']:
-                    if float(position['amount']) != 0:  # 只显示有持仓的
-                        positions.append({
-                            'symbol': position['symbol'],
-                            'amount': float(position['amount']),
-                            'entry_price': float(position['entry_price']),
-                            'mark_price': float(position['mark_price']),
-                            'unrealized_pnl': float(position['unrealized_pnl']),
-                            'leverage': float(position['leverage']),
-                            'side': 'LONG' if position['side'] == 'buy' else 'SHORT'
-                        })
-            
-            return {
-                'total_balance': float(account_data['total_balance']),
-                'unrealized_pnl': float(account_data['unrealized_pnl']),
-                'positions': positions
-            }
+            for attempt in range(max_retries):
+                try:
+                    # 获取合约账户信息
+                    response = requests.get('https://api.lbank.info/v2/user/contract_account', params=params)
+                    
+                    # 处理429错误（请求频率限制）
+                    if response.status_code == 429:
+                        if attempt < max_retries - 1:  # 如果不是最后一次尝试
+                            wait_time = retry_delay * (2 ** attempt)  # 指数退避
+                            logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            raise Exception("Rate limit exceeded after all retries")
+                    
+                    response.raise_for_status()  # 检查其他HTTP错误
+                    
+                    data = response.json()
+                    if not data['result']:
+                        raise Exception("Failed to get LBank account data")
+                    
+                    account_data = data['data']
+                    
+                    # 获取持仓信息
+                    positions_response = requests.get('https://api.lbank.info/v2/user/contract_position', params=params)
+                    positions_data = positions_response.json()
+                    
+                    positions = []
+                    if positions_data['result']:
+                        for position in positions_data['data']:
+                            if float(position['amount']) != 0:  # 只显示有持仓的
+                                positions.append({
+                                    'symbol': position['symbol'],
+                                    'amount': float(position['amount']),
+                                    'entry_price': float(position['entry_price']),
+                                    'mark_price': float(position['mark_price']),
+                                    'unrealized_pnl': float(position['unrealized_pnl']),
+                                    'leverage': float(position['leverage']),
+                                    'side': 'LONG' if position['side'] == 'buy' else 'SHORT'
+                                })
+                    
+                    return {
+                        'total_balance': float(account_data['total_balance']),
+                        'unrealized_pnl': float(account_data['unrealized_pnl']),
+                        'positions': positions
+                    }
+                    
+                except Exception as e:
+                    if attempt < max_retries - 1:  # 如果不是最后一次尝试
+                        wait_time = retry_delay * (2 ** attempt)  # 指数退避
+                        logger.warning(f"Attempt {attempt + 1} failed, waiting {wait_time} seconds before retry: {str(e)}")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise e
                 
     except Exception as e:
         logger.error(f"Error getting account balance: {str(e)}")
@@ -2253,11 +2321,16 @@ def get_account_data():
         account_info = get_account_balance(exchange)
         if not account_info:
             logger.error(f"Failed to get account info for exchange: {exchange}")
+            # 返回一个默认的响应，而不是错误
             return api_response(
-                success=False,
-                error="无法获取账户信息",
-                message="请检查API密钥配置",
-                status_code=400
+                data={
+                    'total_balance': 0.0,
+                    'unrealized_pnl': 0.0,
+                    'daily_pnl': 0.0,
+                    'positions': [],
+                    'status': 'error',
+                    'message': 'Unable to fetch account data'
+                }
             )
             
         # 获取今日交易记录
@@ -2283,18 +2356,24 @@ def get_account_data():
                 'unrealized_pnl': float(pos.get('unrealized_pnl', 0)),
                 'leverage': float(pos.get('leverage', 1)),
                 'side': pos.get('side', 'NONE')
-            } for pos in account_info.get('positions', [])]
+            } for pos in account_info.get('positions', [])],
+            'status': 'success'
         }
         
         return api_response(data=response_data)
     except Exception as e:
         logger.error(f"Error getting account data: {str(e)}")
         return api_response(
-            success=False,
-            error=str(e),
-            message="获取账户数据失败",
-            status_code=500
+            data={
+                'total_balance': 0.0,
+                'unrealized_pnl': 0.0,
+                'daily_pnl': 0.0,
+                'positions': [],
+                'status': 'error',
+                'message': str(e)
+            }
         )
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    # 确保在VPS上运行时使用正确的配置
+    app.run(host='0.0.0.0', port=5000, debug=False) 
